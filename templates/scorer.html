@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+
+{% block title %}Scorer — Triage Tool{% endblock %}
+
+{% block head %}
+<style>
+  .diff-row { display: flex; align-items: center; gap: .6rem;
+              padding: .35rem .6rem; border-radius: 6px; margin-bottom: .25rem; }
+  .diff-match   { background: #f0fdf4; }
+  .diff-extra   { background: #fef2f2; }
+  .diff-missing { background: #eff6ff; }
+  .diff-wrong   { background: #fffbeb; }
+  .diff-icon    { font-size: 1rem; min-width: 1.2rem; text-align: center; }
+  .diff-sym     { font-family: monospace; font-size: .82rem; }
+  .diff-arrow   { color: #9ca3af; }
+  .penalty-badge {
+    font-size: 2rem; font-weight: 800;
+    width: 72px; height: 72px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .penalty-0  { background: #d1fae5; color: #065f46; }
+  .penalty-lo { background: #fef9c3; color: #713f12; }
+  .penalty-hi { background: #fee2e2; color: #7f1d1d; }
+  .model-stat { text-align: center; padding: .75rem 1rem;
+                background: #f8fafc; border-radius: 8px; }
+  .model-stat .val { font-size: 1.5rem; font-weight: 700; color: #1a6b9a; }
+  .model-stat .lbl { font-size: .72rem; text-transform: uppercase;
+                     letter-spacing: .05em; color: #6c7a8a; }
+</style>
+{% endblock %}
+
+{% block topbar %}
+  <i class="bi bi-activity text-muted me-2"></i>
+  <h5 class="me-auto">Scorer</h5>
+{% endblock %}
+
+{% block content %}
+
+<div class="row g-3">
+
+  <!-- ── LEFT: sequence builder ── -->
+  <div class="col-lg-5">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-white fw-semibold">
+        Build a sequence to score
+        <div class="text-muted small fw-normal">
+          Compose a proposed triage path and check it against the automaton
+        </div>
+      </div>
+      <div class="card-body d-flex flex-column gap-2 pb-2">
+
+        <!-- Step picker -->
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input id="stepSearch" class="form-control" placeholder="Filter steps…"
+                 oninput="filterSteps()">
+        </div>
+        <select id="catFilter" class="form-select form-select-sm"
+                onchange="filterSteps()">
+          <option value="">All categories</option>
+          {% set cats = steps | map(attribute='category') | select | unique | sort | list %}
+          {% for cat in cats %}
+          <option>{{ cat }}</option>
+          {% endfor %}
+        </select>
+
+        <div id="stepLibrary" style="max-height:240px;overflow-y:auto">
+          {% for s in steps %}
+          <div class="library-step mb-1"
+               data-sym="{{ s.symbol }}"
+               data-action="{{ s.action|lower }}"
+               data-cat="{{ (s.category or '')|lower }}"
+               data-desc="{{ (s.description or '')|lower }}"
+               onclick="appendSymbol('{{ s.symbol }}')">
+            <span class="symbol-pill" style="font-size:.76rem">{{ s.symbol }}</span>
+            <span class="text-muted small text-truncate">{{ s.description or '' }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
+        <hr class="my-1"/>
+
+        <!-- Custom symbol entry -->
+        <div class="input-group input-group-sm">
+          <input id="customSym" class="form-control font-monospace text-uppercase"
+                 placeholder="Or type a custom symbol…"
+                 oninput="this.value=this.value.toUpperCase().replace(/\s+/g,'_')"
+                 onkeydown="if(event.key==='Enter') addCustom()">
+          <button class="btn btn-outline-secondary" onclick="addCustom()">
+            <i class="bi bi-plus-lg"></i>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: sequence + result ── -->
+  <div class="col-lg-7 d-flex flex-column gap-3">
+
+    <!-- Sequence -->
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white d-flex align-items-center gap-2">
+        <span class="fw-semibold me-auto">Sequence</span>
+        <span id="seqBadge" class="badge bg-secondary">0 steps</span>
+        <button class="btn btn-sm btn-outline-danger" onclick="clearSeq()">
+          <i class="bi bi-trash3"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-success" id="saveWtBtn"
+                onclick="openSaveModal()" title="Save as {{ cfg.session_noun | lower }}" style="display:none">
+          <i class="bi bi-bookmark-plus me-1"></i> Save as {{ cfg.session_noun | lower }}
+        </button>
+        <button class="btn btn-sm btn-primary" id="scoreBtn" onclick="scoreSeq()">
+          <i class="bi bi-play-fill me-1"></i> Score
+        </button>
+      </div>
+      <div class="card-body" style="min-height:64px">
+        <div id="seqList">
+          <span class="text-muted small">Add steps from the library on the left.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div class="card shadow-sm border-0" id="resultCard" style="display:none">
+      <div class="card-header bg-white fw-semibold">Result</div>
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-4 mb-3">
+          <div id="penaltyBadge" class="penalty-badge">—</div>
+          <div>
+            <div class="fw-semibold" id="penaltyLabel">—</div>
+            <div class="text-muted small" id="penaltyDesc">—</div>
+          </div>
+        </div>
+
+        <!-- Diff -->
+        <div id="diffSection" style="display:none">
+          <div class="fw-semibold small text-muted mb-2 text-uppercase"
+               style="letter-spacing:.05em">Diff vs nearest accepted path</div>
+          <div id="diffList"></div>
+        </div>
+
+        <!-- Corrected path -->
+        <div id="corrSection" style="display:none" class="mt-2">
+          <div class="fw-semibold small text-muted mb-1 text-uppercase"
+               style="letter-spacing:.05em">Nearest accepted path</div>
+          <div id="corrList" class="d-flex flex-wrap gap-1"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Save as walkthrough modal ── -->
+<div class="modal fade" id="saveWtModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Save as {{ cfg.session_noun }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+          <input id="wtSaveName" class="form-control" placeholder="e.g. Chest pain — stable adult">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Label</label>
+          <select id="wtSaveLabel" class="form-select">
+            <option value="positive">✓ positive</option>
+            <option value="negative">✕ negative</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <input id="wtSaveDesc" class="form-control" placeholder="Optional notes">
+        </div>
+        <div id="wtSaveWarning" class="alert alert-warning small d-none"></div>
+        <div id="wtSaveError" class="alert alert-danger d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-success" id="wtSaveBtn" onclick="saveAsWalkthrough()">
+          <i class="bi bi-bookmark-plus me-1"></i> Save
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Symbol → step ID lookup (built from server-rendered library) ───────────
+const STEP_IDS = {
+  {% for s in steps %}"{{ s.symbol }}": {{ s.id }},
+  {% endfor %}
+};
+
+// ── State ──────────────────────────────────────────────────────────────────
+let seq = [];
+
+// ── Library filter ─────────────────────────────────────────────────────────
+function filterSteps() {
+  const q   = document.getElementById('stepSearch').value.toLowerCase();
+  const cat = document.getElementById('catFilter').value.toLowerCase();
+  document.querySelectorAll('#stepLibrary .library-step').forEach(el => {
+    const ok = (!q   || el.dataset.sym.toLowerCase().includes(q) ||
+                        el.dataset.desc.includes(q)) &&
+               (!cat || el.dataset.cat === cat);
+    el.style.display = ok ? '' : 'none';
+  });
+}
+
+// ── Sequence editing ───────────────────────────────────────────────────────
+function appendSymbol(sym) {
+  seq.push(sym);
+  renderSeq();
+  hideResult();
+}
+
+function addCustom() {
+  const v = document.getElementById('customSym').value.trim();
+  if (!v) return;
+  appendSymbol(v);
+  document.getElementById('customSym').value = '';
+}
+
+function removeSymbol(i) {
+  seq.splice(i, 1);
+  renderSeq();
+  hideResult();
+}
+
+function clearSeq() {
+  seq = [];
+  renderSeq();
+  hideResult();
+}
+
+function renderSeq() {
+  const el = document.getElementById('seqList');
+  document.getElementById('seqBadge').textContent = seq.length + ' step' + (seq.length !== 1 ? 's' : '');
+  document.getElementById('saveWtBtn').style.display = seq.length ? '' : 'none';
+  if (!seq.length) {
+    el.innerHTML = '<span class="text-muted small">Add steps from the library on the left.</span>';
+    return;
+  }
+  el.innerHTML = seq.map((s, i) =>
+    `<span class="symbol-pill me-1 mb-1 d-inline-flex align-items-center gap-1">
+      <span class="step-index" style="width:18px;height:18px;font-size:.65rem">${i+1}</span>
+      ${s}
+      <button class="btn-close btn-close-sm" style="font-size:.55rem"
+              onclick="removeSymbol(${i})"></button>
+    </span>`
+  ).join('');
+}
+
+// ── Scoring ────────────────────────────────────────────────────────────────
+async function scoreSeq() {
+  if (!seq.length) { showToast('Add at least one step first.', 'error'); return; }
+  const btn = document.getElementById('scoreBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-sm me-1"></span> Scoring…';
+  try {
+    const res = await apiFetch('/api/score', {
+      method: 'POST',
+      body:   JSON.stringify({sequence: seq}),
+    });
+    showResult(res);
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Score';
+  }
+}
+
+function showResult(r) {
+  document.getElementById('resultCard').style.display = '';
+
+  // Penalty badge
+  const badge = document.getElementById('penaltyBadge');
+  badge.textContent = r.penalty;
+  badge.className = 'penalty-badge ' + (
+    r.penalty === 0 ? 'penalty-0' :
+    r.penalty <= 2  ? 'penalty-lo' : 'penalty-hi'
+  );
+  document.getElementById('penaltyLabel').textContent =
+    r.accepts ? '✓ Accepted — matches the learned automaton' :
+                `⚠ ${r.penalty} correction${r.penalty !== 1 ? 's' : ''} needed`;
+  document.getElementById('penaltyDesc').textContent =
+    r.accepts
+      ? 'This path is consistent with known-good triage practice.'
+      : 'The path deviates from the learned automaton by ' + r.penalty +
+        ' edit operation' + (r.penalty !== 1 ? 's' : '') + '.';
+
+  // Diff
+  const diffSec  = document.getElementById('diffSection');
+  const diffList = document.getElementById('diffList');
+  if (r.diff && r.diff.length) {
+    diffList.innerHTML = r.diff.map(op => {
+      const cfg = {
+        match:   {cls:'diff-match',   icon:'✓', color:'#15803d', label: op.symbol},
+        extra:   {cls:'diff-extra',   icon:'✕', color:'#b91c1c', label: op.symbol + ' (remove)'},
+        missing: {cls:'diff-missing', icon:'+', color:'#1d4ed8', label: op.symbol + ' (insert)'},
+        wrong:   {cls:'diff-wrong',   icon:'~', color:'#92400e',
+                  label: op.symbol + ' → ' + op.expected},
+      }[op.op];
+      return `<div class="diff-row ${cfg.cls}">
+        <span class="diff-icon" style="color:${cfg.color}">${cfg.icon}</span>
+        <span class="diff-sym">${cfg.label}</span>
+      </div>`;
+    }).join('');
+    diffSec.style.display = '';
+  } else {
+    diffSec.style.display = 'none';
+  }
+
+  // Corrected path
+  const corrSec  = document.getElementById('corrSection');
+  const corrList = document.getElementById('corrList');
+  if (!r.accepts && r.corrected && r.corrected.length) {
+    corrList.innerHTML = r.corrected.map(s =>
+      `<span class="symbol-pill">${s}</span>`).join(
+      '<span class="text-muted mx-1">→</span>'
+    );
+    corrSec.style.display = '';
+  } else {
+    corrSec.style.display = 'none';
+  }
+}
+
+function hideResult() {
+  document.getElementById('resultCard').style.display = 'none';
+}
+
+// ── Save as walkthrough ─────────────────────────────────────────────────────
+function openSaveModal() {
+  if (!seq.length) { showToast('Add at least one step first.', 'error'); return; }
+
+  // Pre-fill name from the sequence symbols
+  document.getElementById('wtSaveName').value  = '';
+  document.getElementById('wtSaveLabel').value = 'positive';
+  document.getElementById('wtSaveDesc').value  = '';
+  document.getElementById('wtSaveError').classList.add('d-none');
+
+  // Warn about any custom symbols not in the step library
+  const unknown = seq.filter(s => !(s in STEP_IDS));
+  const warnEl  = document.getElementById('wtSaveWarning');
+  if (unknown.length) {
+    warnEl.textContent = `The following symbols are not in the step library and will be skipped: ${unknown.join(', ')}`;
+    warnEl.classList.remove('d-none');
+  } else {
+    warnEl.classList.add('d-none');
+  }
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('saveWtModal')).show();
+}
+
+async function saveAsWalkthrough() {
+  const nameEl  = document.getElementById('wtSaveName');
+  const errEl   = document.getElementById('wtSaveError');
+  const saveBtn = document.getElementById('wtSaveBtn');
+  errEl.classList.add('d-none');
+
+  const name = nameEl.value.trim();
+  if (!name) {
+    errEl.textContent = 'Name is required.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner-border spinner-sm me-1"></span> Saving…';
+
+  try {
+    // 1. Create the walkthrough
+    const wt = await apiFetch('/api/walkthroughs', {
+      method: 'POST',
+      body: JSON.stringify({
+        name:        name,
+        label:       document.getElementById('wtSaveLabel').value,
+        description: document.getElementById('wtSaveDesc').value.trim(),
+      }),
+    });
+
+    // 2. Append each known step in order
+    const known = seq.filter(s => s in STEP_IDS);
+    for (const sym of known) {
+      await apiFetch(`/api/walkthroughs/${wt.id}/steps`, {
+        method: 'POST',
+        body:   JSON.stringify({ step_id: STEP_IDS[sym] }),
+      });
+    }
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('saveWtModal')).hide();
+    showToast(`Walkthrough "${name}" saved with ${known.length} step${known.length !== 1 ? 's' : ''}`);
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('d-none');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<i class="bi bi-bookmark-plus me-1"></i> Save';
+  }
+}
+
+</script>
+{% endblock %}

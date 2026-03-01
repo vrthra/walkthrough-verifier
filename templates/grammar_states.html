@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cfg.meta_library_name }} — {{ cfg.app_name }}{% endblock %}
+
+{% block topbar %}
+  <i class="bi bi-braces text-muted me-2"></i>
+  <h5 class="me-auto">{{ cfg.meta_library_name }}</h5>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-info small mb-3">
+  <i class="bi bi-info-circle me-1"></i>
+  <strong>{{ cfg.meta_library_name }}</strong> — {{ cfg.domain_meta_desc }}
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0" id="statesTable">
+      <thead>
+        <tr>
+          <th class="ps-3">Grammar Key <span class="text-muted fw-normal">(&lt;name&gt;)</span></th>
+          <th>Role</th>
+          <th>Category</th>
+          <th>Description</th>
+          <th>Updated</th>
+          <th style="width:48px">Color</th>
+          <th style="width:90px"></th>
+        </tr>
+      </thead>
+      <tbody id="statesBody">
+        {% for s in states %}
+        <tr data-id="{{ s.id }}">
+          <td class="ps-3">
+            <span class="symbol-pill clickable-state" data-color="{{ s.color or '#6c757d' }}"
+                title="Click to edit">&lt;{{ s.name }}&gt;</span>
+          </td>
+          <td>
+            <span class="badge" style="background:#e3eef7;color:#1a6b9a;font-family:monospace">{{ s.role }}</span>
+          </td>
+          <td>
+            <span class="badge" style="background:#f0e8fb;color:#5a3a8a">{{ s.category or 'Meta' }}</span>
+          </td>
+          <td class="text-muted">{{ s.description or '—' }}</td>
+          <td class="text-muted">{{ s.updated_at.strftime('%d %b %Y') }}</td>
+          <td data-color-val="{{ s.color or '#6c757d' }}" style="text-align:center">
+            <span class="color-swatch" style="background:{{ s.color or '#6c757d' }}"></span>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-secondary btn-edit-state"
+                    data-id="{{ s.id }}"
+                    data-name="{{ s.name }}"
+                    data-role="{{ s.role }}"
+                    data-category="{{ s.category or 'Meta' }}"
+                    data-description="{{ s.description or '' }}"
+                    data-color="{{ s.color or '#6c757d' }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No states found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Edit state modal ── -->
+<div class="modal fade" id="stateModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Grammar State</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editStateId"/>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Role</label>
+          <input id="fRole" class="form-control font-monospace" disabled>
+          <div class="form-text">Structural role — cannot be changed.</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <span class="input-group-text font-monospace">&lt;</span>
+            <input id="fName" class="form-control font-monospace"
+                   placeholder="e.g. triage"
+                   oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9\-]/g,'-')">
+            <span class="input-group-text font-monospace">&gt;</span>
+          </div>
+          <div class="form-text">Lowercase, hyphen-separated. This becomes the grammar key.</div>
+        </div>
+
+        <hr/>
+        <p class="text-muted small mb-2">Metadata — does not affect grammar key:</p>
+
+        <div class="mb-3">
+          <label class="form-label">Category</label>
+          <input id="fCategory" class="form-control" value="Meta" placeholder="Meta">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea id="fDescription" class="form-control" rows="2"
+                    placeholder="Optional human-readable description"></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Colour</label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="color" id="fColor" class="form-control form-control-color"
+                   style="width:46px;height:38px;padding:2px;cursor:pointer" value="#6c757d">
+            <select class="form-select form-select-sm" onchange="applyStateColorPreset(this)">
+              <option value="">— quick pick —</option>
+              <option value="#6c757d">⚫ Grey — start / neutral</option>
+              <option value="#0d6efd">🔵 Blue — triage waiting</option>
+              <option value="#fd7e14">🟠 Orange — active assessment</option>
+              <option value="#198754">🟢 Green — routing done / exit</option>
+              <option value="#0dcaf0">🩵 Teal — complete</option>
+              <option value="#dc3545">🔴 Red — error / rejected</option>
+            </select>
+          </div>
+          <div class="form-text">Shown as a dot next to the state key.</div>
+        </div>
+
+        <div id="stateFormError" class="alert alert-danger d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="saveStateBtn" onclick="saveState()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.clickable-state {
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.clickable-state:hover {
+  opacity: .75;
+  text-decoration: underline dotted;
+}
+</style>
+<script>
+// Make table sortable (skip last 1 column — action buttons)
+makeSortable('statesTable', 1);
+
+function getModal() {
+  return bootstrap.Modal.getOrCreateInstance(document.getElementById('stateModal'));
+}
+
+function applyStateColorPreset(sel) {
+  if (sel.value) document.getElementById('fColor').value = sel.value;
+  sel.value = '';
+}
+
+// Delegated click listener for edit buttons AND clickable pills
+document.addEventListener('click', function(e) {
+  // clicking the pill delegates to the row's edit button
+  const pill = e.target.closest('.clickable-state');
+  if (pill) {
+    pill.closest('tr').querySelector('.btn-edit-state').click();
+    return;
+  }
+  const btn = e.target.closest('.btn-edit-state');
+  if (!btn) return;
+  const ds = btn.dataset;
+  document.getElementById('editStateId').value   = ds.id;
+  document.getElementById('fRole').value         = ds.role;
+  document.getElementById('fName').value         = ds.name;
+  document.getElementById('fCategory').value     = ds.category;
+  document.getElementById('fDescription').value  = ds.description;
+  document.getElementById('fColor').value        = ds.color || '#6c757d';
+  document.getElementById('stateFormError').classList.add('d-none');
+  getModal().show();
+});
+
+async function saveState() {
+  const btn   = document.getElementById('saveStateBtn');
+  const errEl = document.getElementById('stateFormError');
+  errEl.classList.add('d-none');
+
+  const id   = document.getElementById('editStateId').value;
+  const body = {
+    name:        document.getElementById('fName').value.trim(),
+    category:    document.getElementById('fCategory').value.trim() || 'Meta',
+    description: document.getElementById('fDescription').value.trim(),
+    color:       document.getElementById('fColor').value.trim(),
+  };
+
+  if (!body.name) {
+    errEl.textContent = 'Name is required.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const updated = await apiFetch(`/api/grammar-states/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+
+    // Update the table row in-place
+    const row = document.querySelector(`tr[data-id="${id}"]`);
+    if (row) {
+      row.cells[0].innerHTML = pillHtml(`&lt;${updated.name}&gt;`, updated.color);
+      row.cells[3].textContent = updated.description || '—';
+      const now = new Date(updated.updated_at);
+      row.cells[4].textContent = now.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
+      // Refresh color swatch cell (index 5)
+      const swatchCell = row.cells[5];
+      if (swatchCell) {
+        swatchCell.dataset.colorVal = updated.color || '#6c757d';
+        const sw = swatchCell.querySelector('.color-swatch');
+        if (sw) sw.style.background = updated.color || '#6c757d';
+      }
+      // refresh button data attributes
+      const editBtn = row.querySelector('.btn-edit-state');
+      editBtn.dataset.name        = updated.name;
+      editBtn.dataset.description = updated.description || '';
+      editBtn.dataset.category    = updated.category || 'Meta';
+      editBtn.dataset.color       = updated.color || '#6c757d';
+    }
+
+    showToast('Grammar state updated');
+    getModal().hide();
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('d-none');
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration — {{ cfg.app_name }}{% endblock %}
+
+{% block topbar %}
+  <i class="bi bi-sliders text-muted me-2"></i>
+  <h5 class="me-auto">Configuration</h5>
+  <button class="btn btn-outline-secondary btn-sm me-2" onclick="copyConfigJson(this)" title="Copy current config as JSON">
+    <i class="bi bi-clipboard me-1"></i> Copy JSON
+  </button>
+  <button class="btn btn-success btn-sm" onclick="saveConfig()">
+    <i class="bi bi-check-lg me-1"></i> Save
+  </button>
+{% endblock %}
+
+{% block content %}
+
+<!-- Domain presets -->
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
+    <i class="bi bi-lightning-charge text-warning"></i>
+    Domain Presets
+    <span class="text-muted fw-normal small ms-1">— quick-fill all fields for a known domain</span>
+  </div>
+  <div class="card-body d-flex flex-wrap gap-2">
+    <button class="btn btn-outline-secondary btn-sm" onclick="applyPreset('hospital')">
+      <i class="bi bi-heart-pulse me-1"></i> Hospital Triage
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="applyPreset('airport')">
+      <i class="bi bi-airplane me-1"></i> Airport Passenger Flow
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="applyPreset('manufacturing')">
+      <i class="bi bi-gear me-1"></i> Manufacturing / Assembly
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="applyPreset('logistics')">
+      <i class="bi bi-truck me-1"></i> Logistics / Parcel Tracking
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="applyPreset('software')">
+      <i class="bi bi-code-slash me-1"></i> Software Incident Response
+    </button>
+  </div>
+</div>
+
+<form id="configForm">
+<div class="row g-4">
+
+  <!-- ── LEFT COLUMN ── -->
+  <div class="col-lg-6">
+
+    <!-- Identity -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white fw-semibold">
+        <i class="bi bi-person-badge me-1 text-muted"></i> App Identity
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">App name</label>
+          <input name="app_name" class="form-control" value="{{ cfg.app_name }}"
+                 placeholder="{{ defaults.app_name }}">
+          <div class="form-text">Shown in the sidebar header and page titles.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Subtitle</label>
+          <input name="app_subtitle" class="form-control" value="{{ cfg.app_subtitle }}"
+                 placeholder="{{ defaults.app_subtitle }}">
+          <div class="form-text">Small text below the app name in the sidebar.</div>
+        </div>
+        <div class="mb-0">
+          <label class="form-label fw-semibold">Sidebar icon</label>
+          <div class="d-flex gap-2 flex-wrap" id="iconPicker">
+            {% set icons = [
+              ("bi-heart-pulse-fill",  "Hospital"),
+              ("bi-airplane-fill",     "Airport"),
+              ("bi-gear-fill",         "Industry"),
+              ("bi-truck",             "Logistics"),
+              ("bi-diagram-3-fill",    "Workflow"),
+              ("bi-shield-check",      "Security"),
+              ("bi-cpu-fill",          "Tech"),
+              ("bi-building",          "Enterprise"),
+            ] %}
+            {% for ic, label in icons %}
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary icon-choice {{ 'active' if cfg.app_icon == ic }}"
+                    data-icon="{{ ic }}"
+                    onclick="pickIcon('{{ ic }}', this)"
+                    title="{{ label }}">
+              <i class="bi {{ ic }}"></i>
+            </button>
+            {% endfor %}
+          </div>
+          <input type="hidden" name="app_icon" id="appIconInput" value="{{ cfg.app_icon }}">
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminology -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white fw-semibold">
+        <i class="bi bi-translate me-1 text-muted"></i> Terminology
+      </div>
+      <div class="card-body">
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">Sequence noun (singular)</label>
+            <input name="session_noun" class="form-control" value="{{ cfg.session_noun }}"
+                   placeholder="{{ defaults.session_noun }}">
+            <div class="form-text">e.g. "Walkthrough", "Journey", "Run"</div>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Sequence noun (plural)</label>
+            <input name="session_noun_plural" class="form-control" value="{{ cfg.session_noun_plural }}"
+                   placeholder="{{ defaults.session_noun_plural }}">
+            <div class="form-text">e.g. "Walkthroughs", "Journeys", "Runs"</div>
+          </div>
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">Step noun (singular)</label>
+            <input name="step_noun" class="form-control" value="{{ cfg.step_noun }}"
+                   placeholder="{{ defaults.step_noun }}">
+            <div class="form-text">e.g. "Step", "Event", "Checkpoint"</div>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Step noun (plural)</label>
+            <input name="step_noun_plural" class="form-control" value="{{ cfg.step_noun_plural }}"
+                   placeholder="{{ defaults.step_noun_plural }}">
+            <div class="form-text">e.g. "Steps", "Events", "Checkpoints"</div>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">Step Library name</label>
+            <input name="step_library_name" class="form-control" value="{{ cfg.step_library_name }}"
+                   placeholder="{{ defaults.step_library_name }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Meta Library name</label>
+            <input name="meta_library_name" class="form-control" value="{{ cfg.meta_library_name }}"
+                   placeholder="{{ defaults.meta_library_name }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT COLUMN ── -->
+  <div class="col-lg-6">
+
+    <!-- Entity ID -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white fw-semibold">
+        <i class="bi bi-person me-1 text-muted"></i> Entity Identification
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">ID field label</label>
+          <input name="entity_id_label" class="form-control" value="{{ cfg.entity_id_label }}"
+                 placeholder="{{ defaults.entity_id_label }}">
+          <div class="form-text">Label for the subject ID field on the sequence editor.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">ID placeholder text</label>
+          <input name="entity_id_placeholder" class="form-control" value="{{ cfg.entity_id_placeholder }}"
+                 placeholder="{{ defaults.entity_id_placeholder }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Sequence name example</label>
+          <input name="walkthrough_name_example" class="form-control"
+                 value="{{ cfg.walkthrough_name_example }}"
+                 placeholder="{{ defaults.walkthrough_name_example }}">
+          <div class="form-text">Placeholder text in the Name field when creating a new sequence.</div>
+        </div>
+        <div class="mb-0">
+          <label class="form-label fw-semibold">Step action example</label>
+          <input name="step_action_example" class="form-control"
+                 value="{{ cfg.step_action_example }}"
+                 placeholder="{{ defaults.step_action_example }}">
+          <div class="form-text">Placeholder text in the Action field of the Step Library modal.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sequence editor label -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white fw-semibold">
+        <i class="bi bi-list-ol me-1 text-muted"></i> Sequence Editor
+      </div>
+      <div class="card-body">
+        <div class="mb-0">
+          <label class="form-label fw-semibold">Sequence panel heading</label>
+          <input name="sequence_label" class="form-control" value="{{ cfg.sequence_label }}"
+                 placeholder="{{ defaults.sequence_label }}">
+          <div class="form-text">Heading on the sequence builder panel, e.g. "Triage sequence", "Passenger journey".</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Domain descriptions -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white fw-semibold">
+        <i class="bi bi-chat-text me-1 text-muted"></i> Descriptive Text
+        <span class="text-muted fw-normal small ms-1">— info banners shown to users</span>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Positive sequence description</label>
+          <textarea name="domain_positive_desc" class="form-control" rows="2">{{ cfg.domain_positive_desc }}</textarea>
+          <div class="form-text">Shown in the score panel when a sequence is accepted by the automaton.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Negative sequences info banner</label>
+          <textarea name="domain_negative_desc" class="form-control" rows="3">{{ cfg.domain_negative_desc }}</textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Alphabet (Step Library) note</label>
+          <textarea name="domain_alphabet_note" class="form-control" rows="2">{{ cfg.domain_alphabet_note }}</textarea>
+        </div>
+        <div class="mb-0">
+          <label class="form-label fw-semibold">Meta Library description</label>
+          <textarea name="domain_meta_desc" class="form-control" rows="2">{{ cfg.domain_meta_desc }}</textarea>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Database ── (full width, below the two columns) -->
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
+    <i class="bi bi-database me-1 text-muted"></i> Database
+    <span class="badge bg-warning text-dark ms-2" style="font-size:.72rem">
+      <i class="bi bi-arrow-clockwise me-1"></i>Requires restart
+    </span>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 align-items-start">
+      <div class="col-md-8">
+        <label class="form-label fw-semibold">Data directory</label>
+        <input name="db_dir" class="form-control font-monospace"
+               value="{{ cfg.db_dir or defaults.db_dir }}"
+               placeholder="{{ defaults.db_dir }}">
+        <div class="form-text">
+          Directory where <code>triage.db</code> (SQLite) and <code>triage_scorer.pkl</code> (trained model) are stored.
+          Point this to a different path to switch between completely independent datasets
+          (e.g. one directory for hospital, another for airport).
+          <strong>The app must be restarted</strong> for a path change to take effect.
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Currently active</label>
+        <div class="font-monospace small p-2 rounded border"
+             style="background:#f8f9fa;word-break:break-all;color:#333">
+          {{ active_db_dir }}
+        </div>
+        {% if cfg.db_dir and cfg.db_dir != active_db_dir %}
+        <div class="alert alert-warning mt-2 py-2 small mb-0">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          Saved path differs from active path — restart the app to apply.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+</form>
+
+<!-- Live preview -->
+<div class="card shadow-sm border-0 mb-4" id="previewCard">
+  <div class="card-header bg-white fw-semibold">
+    <i class="bi bi-eye me-1 text-muted"></i> Live Preview
+    <span class="text-muted fw-normal small ms-1">— sidebar will look like this after saving</span>
+  </div>
+  <div class="card-body p-0">
+    <div style="background:#12344d;border-radius:0 0 8px 8px;padding:1rem 1.25rem;max-width:240px">
+      <div style="border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:.75rem;margin-bottom:.75rem">
+        <div style="color:#fff;font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.05em">
+          <i id="prevIcon" class="bi {{ cfg.app_icon }} me-1"></i>
+          <span id="prevName">{{ cfg.app_name }}</span>
+        </div>
+        <div style="color:#8eb8d4;font-size:.72rem" id="prevSubtitle">{{ cfg.app_subtitle }}</div>
+      </div>
+      <div style="color:#b8d4e8;font-size:.86rem;display:flex;flex-direction:column;gap:.3rem">
+        <div><i class="bi bi-speedometer2 me-2"></i>Dashboard</div>
+        <div><i class="bi bi-grid-3x3-gap me-2"></i><span id="prevStepLib">{{ cfg.step_library_name }}</span></div>
+        <div><i class="bi bi-braces me-2"></i><span id="prevMetaLib">{{ cfg.meta_library_name }}</span></div>
+        <div><i class="bi bi-diagram-3 me-2"></i><span id="prevSessions">{{ cfg.session_noun_plural }}</span></div>
+        <div><i class="bi bi-diagram-2 me-2"></i>Visualization</div>
+        <div><i class="bi bi-sliders me-2"></i>Configuration</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+
+// ── Domain presets ───────────────────────────────────────────────────────────
+const PRESETS = {
+  hospital: {
+    db_dir:                  {{ defaults.db_dir | tojson }},
+    app_name:                "Triage Tool",
+    app_subtitle:            "Walkthrough Definition \u2014 Module 1",
+    app_icon:                "bi-heart-pulse-fill",
+    step_library_name:       "Step Library",
+    meta_library_name:       "Meta Library",
+    entity_id_label:         "Patient / Encounter ID",
+    entity_id_placeholder:   "e.g. PT-00142",
+    session_noun:            "Walkthrough",
+    session_noun_plural:     "Walkthroughs",
+    step_noun:               "Step",
+    step_noun_plural:        "Steps",
+    sequence_label:          "Triage sequence",
+    walkthrough_name_example:"e.g. Chest pain \u2014 stable adult",
+    step_action_example:     "e.g. BP_CHECK",
+    domain_positive_desc:    "This path is consistent with known-good triage practice.",
+    domain_negative_desc:    "Negative walkthroughs are rejected examples \u2014 triage paths known to be incorrect. RPNI uses them as constraints to ensure the automaton never accepts these sequences.",
+    domain_alphabet_note:    "Each row is one symbol in the triage alphabet. The symbol is the action:data pair \u2014 Category and Description are metadata only and do not affect automaton learning.",
+    domain_meta_desc:        "The non-terminal (DFA state) symbols used in the triage grammar. Rename any state; its key updates in the Visualization immediately. The Role is structural and cannot be changed.",
+  },
+  airport: {
+    db_dir:                  {{ defaults.db_dir | tojson }}.replace('triage_module1', 'airport_module1'),
+    app_name:                "Passenger Flow Tool",
+    app_subtitle:            "Journey Definition \u2014 Module 1",
+    app_icon:                "bi-airplane-fill",
+    step_library_name:       "Event Library",
+    meta_library_name:       "State Library",
+    entity_id_label:         "Passenger / Booking ID",
+    entity_id_placeholder:   "e.g. PAX-00142",
+    session_noun:            "Journey",
+    session_noun_plural:     "Journeys",
+    step_noun:               "Event",
+    step_noun_plural:        "Events",
+    sequence_label:          "Passenger journey",
+    walkthrough_name_example:"e.g. London Heathrow \u2014 short connection",
+    step_action_example:     "e.g. CHECK_IN",
+    domain_positive_desc:    "This journey is consistent with valid passenger flow procedures.",
+    domain_negative_desc:    "Negative journeys are rejected examples \u2014 passenger flows known to be invalid or unsafe. RPNI uses them as constraints to ensure the automaton never accepts these sequences.",
+    domain_alphabet_note:    "Each row is one event in the passenger flow alphabet. The symbol is the action:outcome pair \u2014 Category and Description are metadata only and do not affect automaton learning.",
+    domain_meta_desc:        "The non-terminal (DFA state) symbols used in the flow grammar. Rename any state; its key updates in the Visualization immediately. The Role is structural and cannot be changed.",
+  },
+  manufacturing: {
+    db_dir:                  {{ defaults.db_dir | tojson }}.replace('triage_module1', 'manufacturing_module1'),
+    app_name:                "Assembly Line Tool",
+    app_subtitle:            "Process Definition \u2014 Module 1",
+    app_icon:                "bi-gear-fill",
+    step_library_name:       "Operation Library",
+    meta_library_name:       "Stage Library",
+    entity_id_label:         "Unit / Batch ID",
+    entity_id_placeholder:   "e.g. BATCH-00142",
+    session_noun:            "Process Run",
+    session_noun_plural:     "Process Runs",
+    step_noun:               "Operation",
+    step_noun_plural:        "Operations",
+    sequence_label:          "Assembly sequence",
+    walkthrough_name_example:"e.g. Widget A \u2014 standard assembly",
+    step_action_example:     "e.g. WELD",
+    domain_positive_desc:    "This assembly sequence conforms to the certified manufacturing process.",
+    domain_negative_desc:    "Negative runs are rejected examples \u2014 assembly sequences known to produce defects or safety violations. RPNI uses them to constrain the automaton.",
+    domain_alphabet_note:    "Each row is one operation in the manufacturing alphabet. The symbol is the action:outcome pair \u2014 Category and Description are metadata only.",
+    domain_meta_desc:        "The non-terminal (DFA state) symbols used in the process grammar. Rename any state; its key updates in the Visualization immediately.",
+  },
+  logistics: {
+    db_dir:                  {{ defaults.db_dir | tojson }}.replace('triage_module1', 'logistics_module1'),
+    app_name:                "Parcel Tracking Tool",
+    app_subtitle:            "Shipment Definition \u2014 Module 1",
+    app_icon:                "bi-truck",
+    step_library_name:       "Scan Library",
+    meta_library_name:       "Status Library",
+    entity_id_label:         "Parcel / Shipment ID",
+    entity_id_placeholder:   "e.g. SHP-00142",
+    session_noun:            "Shipment",
+    session_noun_plural:     "Shipments",
+    step_noun:               "Scan",
+    step_noun_plural:        "Scans",
+    sequence_label:          "Parcel journey",
+    walkthrough_name_example:"e.g. Domestic express \u2014 next day",
+    step_action_example:     "e.g. DEPOT_SCAN",
+    domain_positive_desc:    "This shipment journey follows the expected parcel routing process.",
+    domain_negative_desc:    "Negative shipments are rejected examples \u2014 parcel routes known to cause delays or losses. RPNI uses them as constraints to train the automaton.",
+    domain_alphabet_note:    "Each row is one scan event in the parcel alphabet. The symbol is the action:outcome pair \u2014 Category and Description are metadata only.",
+    domain_meta_desc:        "The non-terminal (DFA state) symbols used in the routing grammar. Rename any state; its key updates in the Visualization immediately.",
+  },
+  software: {
+    db_dir:                  {{ defaults.db_dir | tojson }}.replace('triage_module1', 'software_module1'),
+    app_name:                "Incident Response Tool",
+    app_subtitle:            "Playbook Definition \u2014 Module 1",
+    app_icon:                "bi-shield-check",
+    step_library_name:       "Action Library",
+    meta_library_name:       "Phase Library",
+    entity_id_label:         "Incident / Ticket ID",
+    entity_id_placeholder:   "e.g. INC-00142",
+    session_noun:            "Playbook Run",
+    session_noun_plural:     "Playbook Runs",
+    step_noun:               "Action",
+    step_noun_plural:        "Actions",
+    sequence_label:          "Response sequence",
+    walkthrough_name_example:"e.g. Database outage \u2014 P1",
+    step_action_example:     "e.g. ALERT_TRIAGE",
+    domain_positive_desc:    "This response sequence follows the certified incident playbook.",
+    domain_negative_desc:    "Negative runs are rejected examples \u2014 response sequences that violate SLA or escalation procedures. RPNI uses them as constraints.",
+    domain_alphabet_note:    "Each row is one response action in the playbook alphabet. The symbol is the action:outcome pair \u2014 Category and Description are metadata only.",
+    domain_meta_desc:        "The non-terminal (DFA state) symbols used in the playbook grammar. Rename any state; its key updates in the Visualization immediately.",
+  },
+};
+
+function applyPreset(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  const form = document.getElementById('configForm');
+  Object.entries(p).forEach(([k, v]) => {
+    const el = form.querySelector(`[name="${k}"]`);
+    if (el) el.value = v;
+  });
+  // update icon hidden input + picker highlight
+  pickIcon(p.app_icon);
+  updatePreview();
+  showToast(`Preset "${name}" applied — click Save to confirm`, 'success');
+}
+
+// ── Icon picker ──────────────────────────────────────────────────────────────
+function pickIcon(iconClass, btn) {
+  document.getElementById('appIconInput').value = iconClass;
+  document.querySelectorAll('.icon-choice').forEach(b => {
+    b.classList.toggle('active', b.dataset.icon === iconClass);
+  });
+  updatePreview();
+}
+
+// ── Live preview ─────────────────────────────────────────────────────────────
+function v(name) {
+  const el = document.querySelector(`[name="${name}"]`);
+  return el ? el.value.trim() : '';
+}
+
+function updatePreview() {
+  document.getElementById('prevName').textContent    = v('app_name')            || 'App Name';
+  document.getElementById('prevSubtitle').textContent= v('app_subtitle')        || '';
+  document.getElementById('prevStepLib').textContent = v('step_library_name')   || 'Step Library';
+  document.getElementById('prevMetaLib').textContent = v('meta_library_name')   || 'Meta Library';
+  document.getElementById('prevSessions').textContent= v('session_noun_plural') || 'Sessions';
+  const icon = document.getElementById('appIconInput').value || 'bi-diagram-3-fill';
+  const prevIcon = document.getElementById('prevIcon');
+  prevIcon.className = `bi ${icon} me-1`;
+}
+
+// Attach live preview updates to all form inputs
+document.getElementById('configForm').addEventListener('input', updatePreview);
+
+// ── Copy JSON ────────────────────────────────────────────────────────────────
+function collectFormData() {
+  const form   = document.getElementById('configForm');
+  const inputs = form.querySelectorAll('[name]');
+  const data   = {};
+  inputs.forEach(el => { data[el.name] = el.value.trim(); });
+  data.app_icon = document.getElementById('appIconInput').value;
+  return data;
+}
+
+function copyConfigJson(btn) {
+  const json = JSON.stringify(collectFormData(), null, 2);
+  navigator.clipboard.writeText(json).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-clipboard-check me-1"></i> Copied!';
+    btn.classList.replace('btn-outline-secondary', 'btn-outline-success');
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.classList.replace('btn-outline-success', 'btn-outline-secondary');
+    }, 2000);
+  }).catch(() => showToast('Copy failed — clipboard not available', 'error'));
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+async function saveConfig() {
+  const data = collectFormData();
+  try {
+    await apiFetch('/api/config', { method: 'PUT', body: JSON.stringify(data) });
+    showToast('Configuration saved — reloading…');
+    setTimeout(() => location.reload(), 900);
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+  }
+}
+</script>
+{% endblock %}

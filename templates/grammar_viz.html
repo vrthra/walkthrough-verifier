@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Triage Automaton — Grammar Visualizer</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    #topbar {
+      background: #12344d; color: #fff;
+      padding: .6rem 1rem;
+      display: flex; align-items: center; gap: 1rem;
+    }
+    #topbar a { color: #8eb8d4; text-decoration: none; font-size: .85rem; }
+    #topbar a:hover { color: #fff; }
+    #topbar h6 { margin: 0; font-size: .9rem; }
+    #editor {
+      position: relative !important;
+      top: 0;
+      border: 1px solid lightgray;
+      margin-top: 0px;
+      height: calc(100vh - 80px);
+      width: 420px;
+      z-index: 1;
+      margin-bottom: 0px;
+      padding-bottom: 0px;
+      border-bottom: groove;
+    }
+    #output {
+      position: relative !important;
+      top: 0;
+      border: 1px solid lightgray;
+      width: 545px;
+    }
+    h2 { text-align: center; }
+    .ui-state-active {
+      background: #606060 !important;
+      border-color: #909090 !important;
+    }
+    #content { width: 100%; text-align: left; margin: auto; }
+    #undereditor { margin-top: 3px; margin-left: 4px; }
+    #feedback {
+      margin: auto; margin-top: 10px;
+      font-size: 12px; display: inline; width: 100%;
+      color: #c00;
+    }
+    .terminal {
+      border: 1px solid black; border-radius: 6px; padding: 2px;
+      background: #ffe; display: inline-block; text-align: center;
+    }
+    .nonterminal {
+      border: 1px solid black; padding: 2px;
+      background: #efe; display: inline-block;
+    }
+    table { border: ridge; border-width: 1px; }
+    td { vertical-align: top; border: groove; border-width: 1px; }
+    .noborder { border: none !important; }
+    #outputtab { padding-left: 0px; position: relative; }
+    #maintable { width: calc(100vw - 40px); }
+    #maintdright { width: 100%; }
+    #railroad-diagram {
+      overflow: auto;
+      height: calc(100vh - 80px);
+      padding: 10px;
+    }
+  </style>
+  <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+  <script>
+var railroad = (function () {
+var borderBottomLeftRadius = 'borderBottomLeftRadius',
+    borderBottomRightRadius = 'borderBottomRightRadius',
+    borderTopLeftRadius = 'borderTopLeftRadius',
+    borderTopRightRadius = 'borderTopRightRadius';
+(function () {
+  var style = document.createElement('DIV').style;
+  if (style.borderBottomLeftRadius !== 'string') {
+    if (typeof style.MozBorderRadiusBottomleft === 'string') {
+      borderBottomLeftRadius = 'MozBorderRadiusBottomleft';
+      borderBottomRightRadius = 'MozBorderRadiusBottomright';
+      borderTopLeftRadius = 'MozBorderRadiusTopleft';
+      borderTopRightRadius = 'MozBorderRadiusTopright';
+    } else if (typeof style.WebkitBorderRadiusBottomLeft === 'string') {
+      borderBottomLeftRadius = 'WebkitBorderRadiusBottomLeft';
+      borderBottomRightRadius = 'WebkitBorderRadiusBottomRight';
+      borderTopLeftRadius = 'WebkitBorderRadiusTopLeft';
+      borderTopRightRadius = 'WebkitBorderRadiusTopRight';
+    }
+  }
+})();
+function toNode(content) {
+  if (typeof content === 'string') { return { op: 'html', content: content }; }
+  else if (typeof content === 'object' && typeof content.op === 'string') { return content; }
+  throw new Error(content);
+}
+function or(var_args) {
+  var options = []; var alreadySeen = {};
+  function addOption(child) {
+    switch (child.op) {
+      case '|': for (var i=0,n=child.children.length;i<n;++i){addOption(child.children[i]);}break;
+      case 'html': if(alreadySeen[child.content]!==alreadySeen){alreadySeen[child.content]=alreadySeen;options.push(child);}break;
+      default: options.push(toNode(child));break;
+    }
+  }
+  for (var i=0,n=var_args.length;i<n;++i){addOption(var_args[i]);}
+  if (options.length==1){return options[0];}
+  return {op:'|',children:options};
+}
+function maybe(child){return or(toNode('\u25b6'),toNode(child));}
+function any(child,opt_loopback){return maybe(many(child,opt_loopback));}
+function many(child,opt_loopback){return{op:'+',children:[child],loopback:opt_loopback?toNode(opt_loopback):null};}
+function each(var_args){
+  var items=[];
+  function addItem(item){if(item.op==='.'){for(var i=0,n=item.children.length;i<n;++i){addItem(item.children[i]);}}else{items.push(toNode(item));}}
+  for(var i=0,n=var_args.length;i<n;++i){addItem(var_args[i]);}
+  return{op:'.',children:items};
+}
+function appendToDOM(node,parent,opt_stats){
+  var document=parent.ownerDocument;
+  node=toNode(node);
+  var div=document.createElement('DIV');
+  div.style.display='inline-block';div.style.position='absolute';
+  parent.appendChild(div);
+  if(node.op==='html'){
+    div.innerHTML=node.content;
+    if(node.content==='\u25b6'){div.style.fontSize=div.style.height='8px';}
+    if(opt_stats){opt_stats.width=div.offesetWidth;opt_stats.height=div.offesetHeight;}
+    return div;
+  }
+  var children=[];var n=node.children.length;
+  for(var i=0;i<n;++i){children[i]=appendToDOM(node.children[i],div);}
+  function renderArrowhead(arrowheadText,parent){
+    var arrowhead=document.createElement('SPAN');
+    parent.insertBefore(arrowhead,parent.firstChild);
+    arrowhead.appendChild(document.createTextNode(arrowheadText));
+    arrowhead.style.position='absolute';arrowhead.style.display='inline-block';
+    arrowhead.style.left='0px';arrowhead.style.top='-5px';
+    arrowhead.style.width='100%';arrowhead.style.height='8px';
+    arrowhead.style.fontSize='8px';arrowhead.style.textAlign='center';
+    arrowhead.style.verticalAlign='middle';
+  }
+  function rightArrow(x,width,y,height,junctionX){
+    if(!height){
+      var span=document.createElement('SPAN');
+      span.style.position='absolute';span.style.left=x+'px';span.style.width=width+'px';
+      span.style.top=y+'px';span.style.height='0px';span.style.borderBottom='1px solid #000';
+      div.appendChild(span);
+    } else {
+      if(junctionX===void 0){junctionX=x+(width>>1);}
+      var halfHeight=(Math.abs(height)+1)>>1;
+      var left=document.createElement('SPAN');
+      left.style.position='absolute';left.style.left=x+'px';left.style.width=(junctionX-x)+'px';
+      if(height>0){left.style.top=y+'px';left.style.height=halfHeight+'px';left.style.borderTop='1px solid #000';left.style[borderTopRightRadius]='6px';}
+      else{left.style.top=(y-halfHeight)+'px';left.style.height=halfHeight+'px';left.style.borderBottom='1px solid #000';left.style[borderBottomRightRadius]='6px';}
+      left.style.borderRight='1px solid #000';div.insertBefore(left,div.firstChild);
+      var right=document.createElement('SPAN');
+      right.style.position='absolute';right.style.left=(junctionX)+'px';right.style.width=(x+width-junctionX)+'px';
+      if(height>0){right.style.top=(y+halfHeight)+'px';right.style.height=(height-halfHeight)+'px';right.style.borderBottom='1px solid #000';right.style[borderBottomLeftRadius]='6px';}
+      else{right.style.top=(y+height)+'px';right.style.height=halfHeight+'px';right.style.borderTop='1px solid #000';right.style[borderTopLeftRadius]='6px';}
+      right.style.borderLeft='1px solid #000';div.insertBefore(right,div.firstChild);
+    }
+  }
+  var width=0,height=0;
+  switch(node.op){
+    case '|':
+      for(var i=0;i<n;++i){var child=children[i];width=Math.max(width,32+child.offsetWidth);}
+      var childYCenters=[],leftXs=[],rightXs=[];
+      for(var i=0;i<n;++i){
+        if(i){height+=16;}
+        var child=children[i];child.style.top=height+'px';
+        var childHeight=child.offsetHeight,childWidth=child.offsetWidth;
+        var leftX=((width-childWidth)>>1),rightX=leftX+childWidth;
+        child.style.left=leftX+'px';leftXs[i]=leftX;rightXs[i]=rightX;
+        childYCenters[i]=height+(childHeight>>1);height+=childHeight;
+      }
+      var centerY=(height>>1);
+      for(var i=0;i<n;++i){
+        rightArrow(0,leftXs[i],centerY,childYCenters[i]-centerY,8);
+        rightArrow(rightXs[i],width-rightXs[i],childYCenters[i],centerY-childYCenters[i],width-8);
+      }
+      break;
+    case '+':
+      var child=children[0];
+      var loopback=document.createElement('SPAN');div.insertBefore(loopback,div.firstChild);
+      var minLBHeight=8,loopbackNode,vpadding=0;
+      if(node.loopback){
+        loopbackNode=appendToDOM(node.loopback,div);
+        height=Math.max(minLBHeight,loopbackNode.offsetHeight);
+        width=Math.max(child.offsetWidth,loopbackNode.offsetWidth)+32;
+        loopbackNode.style.top=((height-loopbackNode.offsetHeight)>>1)+'px';
+        loopbackNode.style.left=((width-loopbackNode.offsetWidth)>>1)+'px';
+        height+=4;
+      } else {height=minLBHeight;width=child.offsetWidth+32;}
+      child.style.top=height+'px';child.style.left=((width-child.offsetWidth)>>1)+'px';
+      height=height*2+child.offsetHeight;var centerY=(height>>1);
+      loopback.style.display='inline-block';
+      loopback.style.borderLeft=loopback.style.borderRight=loopback.style.borderTop='1px solid #000';
+      loopback.style[borderTopLeftRadius]=loopback.style[borderTopRightRadius]='6px';
+      loopback.style.position='absolute';loopback.style.left='8px';
+      var loopbackTop=loopbackNode?(loopbackNode.offsetHeight>>1):0;
+      loopback.style.top=loopbackTop+'px';loopback.style.height=(centerY-loopbackTop-8)+'px';loopback.style.width=(width-16)+'px';
+      loopback=document.createElement('SPAN');
+      loopback.style.display='inline-block';loopback.style.borderLeft=loopback.style.borderBottom='1px solid #000';
+      loopback.style[borderBottomLeftRadius]='6px';loopback.style.position='absolute';
+      loopback.style.left='8px';loopback.style.top=(centerY-12)+'px';loopback.style.width='8px';loopback.style.height='12px';
+      div.insertBefore(loopback,div.firstChild);
+      loopback=document.createElement('SPAN');
+      loopback.style.display='inline-block';loopback.style.borderRight=loopback.style.borderBottom='1px solid #000';
+      loopback.style[borderBottomRightRadius]='6px';loopback.style.position='absolute';
+      loopback.style.left=(width-16)+'px';loopback.style.top=(centerY-12)+'px';loopback.style.width='8px';loopback.style.height='12px';
+      div.insertBefore(loopback,div.firstChild);
+      if(!loopbackNode){renderArrowhead('\u25C0',div);}
+      rightArrow(0,16,centerY,0);rightArrow(width-16,16,centerY,0);
+      break;
+    case '.':
+      for(var i=0;i<n;++i){var child=children[i];height=Math.max(height,child.offsetHeight);}
+      rightArrow(0,16,(height>>1),0);width=16;
+      for(var i=0;i<n;++i){
+        var child=children[i];child.style.left=width+'px';width+=child.offsetWidth;
+        rightArrow(width,16,(height>>1),0);width+=16;
+        child.style.top=((height-child.offsetHeight)>>1)+'px';
+      }
+      break;
+    default: throw new Error(node.op);
+  }
+  div.style.width=width+'px';div.style.height=height+'px';
+  if(opt_stats){opt_stats.width=width;opt_stats.height=height;}
+  return div;
+}
+return {any:any,each:each,many:many,maybe:maybe,or:or,appendToDOM:appendToDOM};
+})();
+  </script>
+</head>
+<body>
+
+<div id="topbar">
+  <h6>🏥 Triage Automaton Visualizer</h6>
+  <a href="/grammar">← Back to Grammar</a>
+  <span style="flex:1"></span>
+  <span id="stateCount" style="font-size:.8rem;color:#8eb8d4"></span>
+</div>
+
+<div id="content">
+  <table id="maintable" class="noborder"><tr>
+    <td class="noborder" style="width:420px;vertical-align:top">
+      <pre id="editor"></pre>
+      <div id="undereditor">
+        <div id="feedback"></div>
+      </div>
+    </td>
+    <td class="noborder">
+      <div id="railroad-diagram"></div>
+    </td>
+  </tr></table>
+</div>
+
+<!-- Ace editor from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.23.4/ace.min.js"></script>
+<script>
+var any    = railroad.any,
+    each   = railroad.each,
+    many   = railroad.many,
+    maybe  = railroad.maybe,
+    or     = railroad.or;
+
+function html(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\u0022/g,'&quot;').replace(/\u0027/g,'&#39;');
+}
+function terminal(str) {
+  return '<span class=terminal><kbd>' + html(str) + '<\/kbd><\/span>';
+}
+function nonTerminal(name) {
+  if (document.getElementById(name + '-railroad')) {
+    return '<span class=nonterminal><a style="text-decoration:none" href="#' + html(name) + '_railroad">' + html('<' + name + '>') + '<\/a><\/span>';
+  } else {
+    return '<span class=nonterminal>' + html(name) + '<\/span>';
+  }
+}
+function grammar(name, root) {
+  var stats = {};
+  var railroadContainer = document.getElementById(name + '-railroad');
+  railroad.appendToDOM(root, railroadContainer, stats);
+  railroadContainer.style.width = stats.width + 'px';
+  railroadContainer.style.height = stats.height + 'px';
+}
+function setError(err) { $("#feedback").text(err); }
+function clearError()  { $("#feedback").text(""); }
+
+function loadRule(key, rr, rule) {
+  let my_rule = [];
+  for (const i in rule) {
+    let token = rule[i];
+    if (token[0] == '<') {
+      my_rule.push(nonTerminal(token.slice(1,-1)));
+    } else {
+      my_rule.push(terminal(token));
+    }
+  }
+  return each(my_rule);
+}
+function loadRules(key, rr, rules) {
+  let my_rules = [];
+  for (const i in rules) {
+    my_rules.push(loadRule(key, rr, rules[i]));
+  }
+  return or(my_rules);
+}
+function loadGrammar(rr, g) {
+  rr.innerHTML = '';
+  for (const key in g) {
+    rr.innerHTML += '<span><b><a id="' + key.slice(1,-1) + '_railroad">' + html(key) + '</a></b><p/><div id="' + key.slice(1,-1) + '-railroad"></div><p></span>';
+  }
+  for (const key in g) {
+    grammar(key.slice(1,-1), loadRules(key, rr, g[key]));
+  }
+  const stateCount = Object.keys(g).length;
+  document.getElementById('stateCount').textContent =
+    stateCount + ' DFA state' + (stateCount !== 1 ? 's' : '');
+}
+function parse() {
+  let editor = ace.edit("editor");
+  var txt = editor.getValue();
+  try {
+    var rr  = document.getElementById('railroad-diagram');
+    var val = JSON.parse(txt);
+    loadGrammar(rr, val);
+    clearError();
+  } catch (err) {
+    setError(err);
+  }
+}
+
+// ── Resize ────────────────────────────────────────────────────────────────
+function rescale() {
+  const w = window.innerWidth  || document.documentElement.clientWidth;
+  const h = (window.innerHeight || document.documentElement.clientHeight) - 44;
+  const editorW = Math.min(420, w / 2);
+  $("#editor").css({ width: editorW, height: h });
+  $("#railroad-diagram").css({ width: w - editorW - 20, height: h });
+  let editor = ace.edit("editor");
+  editor.resize();
+}
+window.addEventListener('resize', rescale);
+
+// ── Init ──────────────────────────────────────────────────────────────────
+$(document).ready(function() {
+  let editor = ace.edit("editor");
+  editor.setTheme("ace/theme/chrome");
+  editor.session.setMode("ace/mode/json");
+  editor.session.setUseWorker(false);
+  editor.setOption("showPrintMargin", false);
+  editor.setOption("wrap", true);
+
+  // Load grammar: prefer URL hash, then fetch from API
+  let hash = window.location.hash.substr(1);
+  if (hash) {
+    try {
+      let decoded = decodeURIComponent(hash);
+      editor.session.setValue(decoded);
+      parse();
+    } catch(e) { /* fall through to API */ }
+  }
+
+  if (!hash || $("#railroad-diagram").children().length === 0) {
+    fetch('/api/grammar-json')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          setError(data.error);
+        } else {
+          editor.session.setValue(JSON.stringify(data, null, 2));
+          parse();
+        }
+      })
+      .catch(e => setError('Could not load grammar: ' + e));
+  }
+
+  editor.on('change', parse);
+  rescale();
+});
+</script>
+</body>
+</html>

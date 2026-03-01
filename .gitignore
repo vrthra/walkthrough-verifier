@@ -1,0 +1,10 @@
+# Runtime data — never commit the database or trained model
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pkl
+
+# Env
+.env

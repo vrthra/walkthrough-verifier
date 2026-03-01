@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cfg.step_library_name }} — {{ cfg.app_name }}{% endblock %}
+
+{% block topbar %}
+  <i class="bi bi-grid-3x3-gap text-muted me-2"></i>
+  <h5 class="me-auto">{{ cfg.step_library_name }}</h5>
+  <button class="btn btn-primary btn-sm" onclick="openNewStep()">
+    <i class="bi bi-plus-lg me-1"></i> New {{ cfg.step_noun | lower }}
+  </button>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3 align-items-end">
+  <div class="col-md-5">
+    <input id="searchInput" type="text" class="form-control"
+           placeholder="Search action, data, description…" oninput="filterSteps()">
+  </div>
+  <div class="col-md-3">
+    <select id="catFilter" class="form-select" onchange="filterSteps()">
+      <option value="">All categories</option>
+      {% for cat in categories %}
+      <option value="{{ cat }}">{{ cat }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-4 text-end text-muted small" id="countLabel">
+    {{ steps|length }} symbol(s)
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0" id="stepsTable">
+      <thead>
+        <tr>
+          <th class="ps-3">Symbol <span class="text-muted fw-normal">(action : data)</span></th>
+          <th>Category</th>
+          <th>Description</th>
+          <th>Created</th>
+          <th style="width:48px">Color</th>
+          <th style="width:90px"></th>
+        </tr>
+      </thead>
+      <tbody id="stepsBody">
+        {% for s in steps %}
+        <tr data-id="{{ s.id }}"
+            data-action="{{ s.action|lower }}"
+            data-data="{{ s.data|lower }}"
+            data-category="{{ (s.category or '')|lower }}"
+            data-desc="{{ (s.description or '')|lower }}">
+          <td class="ps-3">
+            <span class="symbol-pill" data-color="{{ s.color or '#6c757d' }}">{{ s.action }}{% if s.data %}<span style="opacity:.5">:</span>{{ s.data }}{% endif %}</span>
+          </td>
+          <td>
+            {% if s.category %}
+            <span class="badge" style="background:#e3eef7;color:#1a6b9a">{{ s.category }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-muted">{{ s.description or '—' }}</td>
+          <td class="text-muted">{{ s.created_at.strftime('%d %b %Y') }}</td>
+          <td data-color-val="{{ s.color or '#6c757d' }}" style="text-align:center">
+            <span class="color-swatch" style="background:{{ s.color or '#6c757d' }}"></span>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-secondary me-1 btn-edit-step"
+                    data-id="{{ s.id }}"
+                    data-action="{{ s.action }}"
+                    data-data="{{ s.data }}"
+                    data-category="{{ s.category or '' }}"
+                    data-description="{{ s.description or '' }}"
+                    data-color="{{ s.color or '#6c757d' }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger"
+                    onclick="deleteStep({{ s.id }}, this)">
+              <i class="bi bi-trash3"></i>
+            </button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">No steps yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- About the alphabet -->
+<div class="alert alert-info mt-3 small">
+  <i class="bi bi-info-circle me-1"></i>
+  <strong>RPNI alphabet note:</strong> {{ cfg.domain_alphabet_note }}
+</div>
+
+<!-- ── Step modal ── -->
+<div class="modal fade" id="stepModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="stepModalTitle">New step</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editStepId"/>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Action <span class="text-danger">*</span></label>
+          <input id="fAction" class="form-control font-monospace text-uppercase"
+                 placeholder="{{ cfg.step_action_example }}"
+                 oninput="this.value=this.value.toUpperCase().replace(/\s+/g,'_')">
+          <div class="form-text">Short, uppercase identifier for the action.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Data (outcome / result)</label>
+          <input id="fData" class="form-control font-monospace text-uppercase"
+                 placeholder="e.g. HIGH"
+                 oninput="this.value=this.value.toUpperCase().replace(/\s+/g,'_')">
+          <div class="form-text">
+            The observed value or outcome. Together with <em>Action</em>, this forms the
+            alphabet symbol <code>ACTION:DATA</code>.
+          </div>
+        </div>
+        <hr/>
+        <p class="text-muted small mb-2">Metadata — does not affect RPNI alphabet:</p>
+        <div class="mb-3">
+          <label class="form-label">Category</label>
+          <input id="fCategory" class="form-control" placeholder="e.g. Vitals, Labs, Routing"
+                 list="catList">
+          <datalist id="catList">
+            {% for cat in categories %}
+            <option value="{{ cat }}">
+            {% endfor %}
+          </datalist>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea id="fDescription" class="form-control" rows="2"
+                    placeholder="Optional human-readable description"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Colour</label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="color" id="fColor" class="form-control form-control-color"
+                   style="width:46px;height:38px;padding:2px;cursor:pointer" value="#6c757d">
+            <select class="form-select form-select-sm" onchange="applyStepColorPreset(this)">
+              <option value="">— quick pick —</option>
+              <option value="#dc3545">🔴 Red — serious / abnormal</option>
+              <option value="#198754">🟢 Green — normal / safe</option>
+              <option value="#fd7e14">🟠 Orange — pending / ICU</option>
+              <option value="#0d6efd">🔵 Blue — lifecycle / discharge</option>
+              <option value="#0dcaf0">🩵 Teal — ward / intermediate</option>
+              <option value="#6c757d">⚫ Grey — neutral</option>
+            </select>
+          </div>
+          <div class="form-text">Shown as a dot next to the symbol. Auto-assigned by default.</div>
+        </div>
+        <div id="stepFormError" class="alert alert-danger d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="saveStepBtn" onclick="saveStep()">Save step</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let editingId = null;
+
+function getModal() {
+  return bootstrap.Modal.getOrCreateInstance(document.getElementById('stepModal'));
+}
+
+function openNewStep() {
+  editingId = null;
+  document.getElementById('stepModalTitle').textContent = 'New step';
+  document.getElementById('fAction').value      = '';
+  document.getElementById('fData').value        = '';
+  document.getElementById('fCategory').value    = '';
+  document.getElementById('fDescription').value = '';
+  document.getElementById('fColor').value       = '#6c757d';
+  document.getElementById('editStepId').value   = '';
+  document.getElementById('stepFormError').classList.add('d-none');
+  getModal().show();
+}
+
+function openEditStep(btn) {
+  const ds = btn.dataset;
+  editingId = ds.id;
+  document.getElementById('stepModalTitle').textContent = 'Edit step';
+  document.getElementById('fAction').value      = ds.action;
+  document.getElementById('fData').value        = ds.data;
+  document.getElementById('fCategory').value    = ds.category;
+  document.getElementById('fDescription').value = ds.description;
+  document.getElementById('fColor').value       = ds.color || '#6c757d';
+  document.getElementById('editStepId').value   = ds.id;
+  document.getElementById('stepFormError').classList.add('d-none');
+  getModal().show();
+}
+
+function applyStepColorPreset(sel) {
+  if (sel.value) document.getElementById('fColor').value = sel.value;
+  sel.value = '';
+}
+
+// Delegate edit-button clicks to avoid any inline JS / quoting issues
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.btn-edit-step');
+  if (btn) openEditStep(btn);
+});
+
+async function saveStep() {
+  const btn  = document.getElementById('saveStepBtn');
+  const errEl= document.getElementById('stepFormError');
+  errEl.classList.add('d-none');
+  const body = {
+    action:      document.getElementById('fAction').value.trim(),
+    data:        document.getElementById('fData').value.trim(),
+    category:    document.getElementById('fCategory').value.trim(),
+    description: document.getElementById('fDescription').value.trim(),
+    color:       document.getElementById('fColor').value.trim(),
+  };
+  if (!body.action) { errEl.textContent = 'Action is required.'; errEl.classList.remove('d-none'); return; }
+  btn.disabled = true;
+  try {
+    let updated;
+    if (editingId) {
+      updated = await apiFetch(`/api/steps/${editingId}`, {method:'PUT', body: JSON.stringify(body)});
+      // update dot in-place so user sees the change without full reload
+      const row = document.querySelector(`tr[data-id="${editingId}"]`);
+      if (row) {
+        const dot = row.querySelector('.color-dot');
+        if (dot) dot.style.background = updated.color;
+        const editBtn = row.querySelector('.btn-edit-step');
+        if (editBtn) editBtn.dataset.color = updated.color;
+      }
+      showToast('Step updated');
+    } else {
+      await apiFetch('/api/steps', {method:'POST', body: JSON.stringify(body)});
+      showToast('Step created');
+    }
+    getModal().hide();
+    location.reload();
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('d-none');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteStep(id, btn) {
+  if (!confirm('Delete this step? It cannot be deleted if it is used in a {{ cfg.session_noun | lower }}.')) return;
+  btn.disabled = true;
+  try {
+    await apiFetch(`/api/steps/${id}`, {method:'DELETE'});
+    showToast('Step deleted');
+    document.querySelector(`tr[data-id="${id}"]`).remove();
+    updateCount();
+  } catch(e) {
+    showToast(e.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+function filterSteps() {
+  const q   = document.getElementById('searchInput').value.toLowerCase();
+  const cat = document.getElementById('catFilter').value.toLowerCase();
+  let count = 0;
+  document.querySelectorAll('#stepsBody tr[data-id]').forEach(row => {
+    const matchQ   = !q || row.dataset.action.includes(q) ||
+                     row.dataset.data.includes(q) || row.dataset.desc.includes(q);
+    const matchCat = !cat || row.dataset.category === cat;
+    const show     = matchQ && matchCat;
+    row.style.display = show ? '' : 'none';
+    if (show) count++;
+  });
+  document.getElementById('countLabel').textContent = count + ' symbol(s)';
+}
+
+function updateCount() {
+  const visible = document.querySelectorAll('#stepsBody tr[data-id]:not([style*="none"])').length;
+  document.getElementById('countLabel').textContent = visible + ' symbol(s)';
+}
+
+// Pre-fill category filter from URL
+const urlCat = new URLSearchParams(location.search).get('category');
+if (urlCat) {
+  document.getElementById('catFilter').value = urlCat;
+  filterSteps();
+}
+
+// Make table sortable (skip last 1 column — action buttons)
+makeSortable('stepsTable', 1);
+</script>
+{% endblock %}

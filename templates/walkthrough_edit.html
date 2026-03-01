@@ -1,0 +1,643 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {{ 'Edit: ' + walkthrough.name if walkthrough else 'New ' + cfg.session_noun }} — {{ cfg.app_name }}
+{% endblock %}
+
+{% block head %}
+<style>
+  .editor-layout { display: grid; grid-template-columns: 320px 1fr; gap: 1rem; }
+  @media (max-width: 900px) { .editor-layout { grid-template-columns: 1fr; } }
+
+  /* Library panel */
+  .library-panel { position: sticky; top: 1rem; }
+  .library-scroll { max-height: calc(100vh - 260px); overflow-y: auto; }
+
+  /* Sequence panel */
+  #sequence { min-height: 80px; }
+  #sequence .empty-hint {
+    border: 2px dashed #dce4ec; border-radius: 8px;
+    padding: 2rem; text-align: center; color: #aab;
+  }
+
+  /* Score result */
+  .diff-row { display:flex; align-items:center; gap:.6rem;
+              padding:.3rem .6rem; border-radius:6px; margin-bottom:.2rem; }
+  .diff-match   { background:#f0fdf4; }
+  .diff-extra   { background:#fef2f2; }
+  .diff-missing { background:#eff6ff; }
+  .diff-wrong   { background:#fffbeb; }
+  .diff-sym     { font-family:monospace; font-size:.82rem; }
+  .penalty-badge-sm {
+    font-size:1.4rem; font-weight:800;
+    width:52px; height:52px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .penalty-0  { background:#d1fae5; color:#065f46; }
+  .penalty-lo { background:#fef9c3; color:#713f12; }
+  .penalty-hi { background:#fee2e2; color:#7f1d1d; }
+</style>
+{% endblock %}
+
+{% block topbar %}
+  <a href="{{ url_for('walkthroughs_page') }}" class="btn btn-sm btn-outline-secondary me-2">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <h5 class="me-auto" id="pageTitle">
+    {{ 'Edit: ' + walkthrough.name if walkthrough else 'New ' + cfg.session_noun }}
+  </h5>
+  <button class="btn btn-success btn-sm" onclick="saveWalkthrough()">
+    <i class="bi bi-check-lg me-1"></i> Save
+  </button>
+{% endblock %}
+
+{% block content %}
+
+<!-- Walkthrough metadata form -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+        <input id="wtName" class="form-control"
+               value="{{ walkthrough.name if walkthrough else '' }}"
+               placeholder="{{ cfg.walkthrough_name_example }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">{{ cfg.entity_id_label }}</label>
+        <input id="wtPatientId" class="form-control font-monospace"
+               value="{{ walkthrough.patient_id if walkthrough and walkthrough.patient_id else '' }}"
+               placeholder="{{ cfg.entity_id_placeholder }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Label</label>
+        <select id="wtLabel" class="form-select">
+          {% set _lbl = walkthrough.label if walkthrough else (default_label | default('positive')) %}
+          <option value="positive" {{ 'selected' if _lbl == 'positive' }}>✓ positive</option>
+          <option value="negative" {{ 'selected' if _lbl == 'negative' }}>✕ negative</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Description</label>
+        <input id="wtDescription" class="form-control"
+               value="{{ walkthrough.description if walkthrough and walkthrough.description else '' }}"
+               placeholder="Optional notes">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Conflict warning panel — hidden until a save triggers a check -->
+<div id="conflictPanel" class="alert alert-danger mb-3 py-2" style="display:none">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+    <span class="fw-semibold">Consistency conflict detected</span>
+    <button type="button" class="btn-close ms-auto" onclick="document.getElementById('conflictPanel').style.display='none'"></button>
+  </div>
+  <p class="small mb-2">
+    After retraining RPNI with current walkthroughs, the following
+    <strong>negative</strong> examples would be <em>accepted</em> by the automaton —
+    meaning a positive walkthrough is now indistinguishable from them at the DFA level.
+    Resolve by removing the conflicting walkthrough, relabelling it, or adding more
+    distinguishing positive examples.
+  </p>
+  <div id="conflictList"></div>
+</div>
+
+<div class="editor-layout">
+
+  <!-- ── LEFT: Step library ── -->
+  <div class="library-panel">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white">
+        <span class="fw-semibold">{{ cfg.step_library_name }}</span>
+        <div class="text-muted small">Click a {{ cfg.step_noun | lower }} to append it to the sequence</div>
+      </div>
+      <div class="card-body pb-2 pt-2">
+        <div class="input-group input-group-sm mb-2">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input id="libSearch" class="form-control" placeholder="Filter steps…"
+                 oninput="filterLibrary()">
+        </div>
+        <select id="libCatFilter" class="form-select form-select-sm mb-2"
+                onchange="filterLibrary()">
+          <option value="">All categories</option>
+        </select>
+      </div>
+      <div class="library-scroll px-2 pb-2" id="libraryList">
+        <div class="text-muted small text-center py-3">Loading…</div>
+      </div>
+      <div class="card-footer bg-white">
+        <button class="btn btn-outline-secondary btn-sm w-100"
+                data-bs-toggle="modal" data-bs-target="#newStepModal">
+          <i class="bi bi-plus-lg me-1"></i> Define new step
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: Sequence editor ── -->
+  <div class="d-flex flex-column gap-3">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white d-flex align-items-center gap-2">
+        <span class="fw-semibold me-auto">{{ cfg.sequence_label }}</span>
+        <span id="seqCount" class="badge bg-secondary">0 steps</span>
+        <button class="btn btn-sm btn-outline-danger" onclick="clearSequence()">
+          <i class="bi bi-trash3 me-1"></i> Clear all
+        </button>
+        <button class="btn btn-sm btn-primary" id="scoreSeqBtn" onclick="scoreSequence()">
+          <i class="bi bi-play-fill me-1"></i> Score
+        </button>
+      </div>
+      <div class="card-body">
+        <div id="sequence"></div>
+        <div class="mt-3 p-2 rounded" style="background:#f8f9fa;font-size:.78rem">
+          <span class="text-muted">RPNI sequence preview:</span><br/>
+          <code id="seqPreview" class="text-break">—</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Score result (hidden until scored) -->
+    <div class="card shadow-sm border-0" id="scoreResult" style="display:none">
+      <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
+        Score result
+        <button type="button" class="btn-close ms-auto" onclick="hideScore()"></button>
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div id="wtPenaltyBadge" class="penalty-badge-sm">—</div>
+          <div>
+            <div class="fw-semibold" id="wtPenaltyLabel">—</div>
+            <div class="text-muted small" id="wtPenaltyDesc">—</div>
+          </div>
+        </div>
+        <div id="wtDiffSection" style="display:none">
+          <div class="text-muted small fw-semibold mb-2 text-uppercase"
+               style="letter-spacing:.05em">Diff vs nearest accepted path</div>
+          <div id="wtDiffList"></div>
+        </div>
+        <div id="wtCorrSection" style="display:none" class="mt-2">
+          <div class="text-muted small fw-semibold mb-1 text-uppercase"
+               style="letter-spacing:.05em">Nearest accepted path</div>
+          <div id="wtCorrList" class="d-flex flex-wrap gap-1"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Inline notes modal ── -->
+<div class="modal fade" id="notesModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">Step notes (metadata)</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <textarea id="notesInput" class="form-control" rows="3"
+                  placeholder="Optional clinical notes — not used by RPNI"></textarea>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" onclick="saveNotes()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Define new step modal ── -->
+<div class="modal fade" id="newStepModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Define new step</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Action <span class="text-danger">*</span></label>
+          <input id="nsAction" class="form-control font-monospace text-uppercase"
+                 placeholder="e.g. ULTRASOUND"
+                 oninput="this.value=this.value.toUpperCase().replace(/\s+/g,'_')">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Data (outcome / result)</label>
+          <input id="nsData" class="form-control font-monospace text-uppercase"
+                 placeholder="e.g. NORMAL"
+                 oninput="this.value=this.value.toUpperCase().replace(/\s+/g,'_')">
+        </div>
+        <hr/>
+        <div class="mb-3">
+          <label class="form-label">Category <span class="text-muted">(metadata)</span></label>
+          <input id="nsCategory" class="form-control" placeholder="e.g. Diagnostics">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description <span class="text-muted">(metadata)</span></label>
+          <textarea id="nsDescription" class="form-control" rows="2"></textarea>
+        </div>
+        <div id="nsError" class="alert alert-danger d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="createNewStep()">Create &amp; add to sequence</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<!-- SortableJS for drag-to-reorder -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const WTD = {
+  id:    {{ walkthrough.id if walkthrough else 'null' }},
+  saved: {{ 'true' if walkthrough else 'false' }},
+  // Sequence: array of {entryId, stepId, symbol, action, data, category, description, notes, color}
+  seq: [],
+  // All steps from library
+  allSteps: [],
+};
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+(async function init() {
+  await loadLibrary();
+  if (WTD.id) {
+    const wt = await apiFetch(`/api/walkthroughs/${WTD.id}`);
+    WTD.seq = wt.steps.map(e => ({
+      entryId:     e.id,
+      stepId:      e.step.id,
+      symbol:      e.step.symbol,
+      action:      e.step.action,
+      data:        e.step.data,
+      category:    e.step.category,
+      description: e.step.description,
+      color:       e.step.color || '#6c757d',
+      notes:       e.notes,
+    }));
+    renderSequence();
+  }
+})();
+
+// ---------------------------------------------------------------------------
+// Library
+// ---------------------------------------------------------------------------
+async function loadLibrary() {
+  WTD.allSteps = await apiFetch('/api/steps');
+  buildCatFilter();
+  renderLibrary(WTD.allSteps);
+}
+
+function buildCatFilter() {
+  const sel = document.getElementById('libCatFilter');
+  const cats = [...new Set(WTD.allSteps.map(s => s.category).filter(Boolean))].sort();
+  cats.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+}
+
+function filterLibrary() {
+  const q   = document.getElementById('libSearch').value.toLowerCase();
+  const cat = document.getElementById('libCatFilter').value;
+  const filtered = WTD.allSteps.filter(s =>
+    (!q || s.action.toLowerCase().includes(q) ||
+           s.data.toLowerCase().includes(q) ||
+           (s.description||'').toLowerCase().includes(q)) &&
+    (!cat || s.category === cat)
+  );
+  renderLibrary(filtered);
+}
+
+function renderLibrary(steps) {
+  const el = document.getElementById('libraryList');
+  if (!steps.length) {
+    el.innerHTML = '<div class="text-muted small text-center py-3">No steps found.</div>';
+    return;
+  }
+  // Group by category
+  const groups = {};
+  steps.forEach(s => {
+    const k = s.category || 'Uncategorised';
+    (groups[k] = groups[k] || []).push(s);
+  });
+  let html = '';
+  Object.entries(groups).sort().forEach(([cat, ss]) => {
+    html += `<div class="text-muted small fw-semibold mt-2 mb-1 px-1"
+                  style="text-transform:uppercase;font-size:.7rem;letter-spacing:.05em">${cat}</div>`;
+    ss.forEach(s => {
+      html += `<div class="library-step mb-1" onclick="appendStep(${s.id})"
+                    title="${s.description || s.symbol}">
+        ${pillHtml(s.symbol, s.color, 'flex-shrink-0')}
+        <span class="text-muted small text-truncate" style="max-width:140px;font-size:.75rem">
+          ${s.description || ''}
+        </span>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Sequence
+// ---------------------------------------------------------------------------
+function appendStep(stepId) {
+  const s = WTD.allSteps.find(x => x.id === stepId);
+  if (!s) return;
+  hideScore();
+  WTD.seq.push({
+    entryId: null, // not yet persisted
+    stepId:  s.id,
+    symbol:  s.symbol,
+    action:  s.action,
+    data:    s.data,
+    category:    s.category,
+    description: s.description,
+    color:       s.color || '#6c757d',
+    notes:   '',
+  });
+  renderSequence();
+}
+
+function renderSequence() {
+  const el = document.getElementById('sequence');
+  if (!WTD.seq.length) {
+    el.innerHTML = `<div class="empty-hint">
+      <i class="bi bi-arrow-left me-1"></i>
+      Click {{ cfg.step_noun_plural | lower }} in the library to build the {{ cfg.sequence_label | lower }}
+    </div>`;
+    document.getElementById('seqPreview').textContent = '—';
+    document.getElementById('seqCount').textContent   = '0 ' + {{ cfg.step_noun_plural | lower | tojson }};
+    return;
+  }
+  el.innerHTML = WTD.seq.map((e, i) => `
+    <div class="step-slot mb-2" data-idx="${i}">
+      <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
+      <span class="step-index">${i + 1}</span>
+      ${pillHtml(e.symbol, e.color)}
+      <span class="text-muted small flex-fill text-truncate">${e.description || ''}</span>
+      ${e.notes ? `<span class="badge bg-light text-dark border" title="${e.notes}">
+        <i class="bi bi-sticky"></i></span>` : ''}
+      <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+              onclick="openNotes(${i})" title="Add/edit notes">
+        <i class="bi bi-sticky"></i>
+      </button>
+      <button class="btn btn-sm btn-outline-danger py-0 px-1"
+              onclick="removeStep(${i})">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+  `).join('');
+
+  // SortableJS
+  Sortable.create(el, {
+    handle: '.drag-handle',
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    onEnd(evt) {
+      const moved = WTD.seq.splice(evt.oldIndex, 1)[0];
+      WTD.seq.splice(evt.newIndex, 0, moved);
+      renderSequence();
+    }
+  });
+
+  // Update preview
+  document.getElementById('seqPreview').textContent = WTD.seq.map(e => e.symbol).join(' → ');
+  const _sn = {{ cfg.step_noun | tojson }};
+  document.getElementById('seqCount').textContent   = WTD.seq.length + ' ' + _sn.toLowerCase() + (WTD.seq.length !== 1 ? 's' : '');
+}
+
+function removeStep(idx) {
+  WTD.seq.splice(idx, 1);
+  hideScore();
+  renderSequence();
+}
+
+function clearSequence() {
+  if (!WTD.seq.length) return;
+  if (!confirm('Remove all steps from this sequence?')) return;
+  WTD.seq = [];
+  hideScore();
+  renderSequence();
+}
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+let notesIdx = null;
+const notesModal = new bootstrap.Modal(document.getElementById('notesModal'));
+
+function openNotes(idx) {
+  notesIdx = idx;
+  document.getElementById('notesInput').value = WTD.seq[idx].notes || '';
+  notesModal.show();
+}
+function saveNotes() {
+  if (notesIdx !== null) {
+    WTD.seq[notesIdx].notes = document.getElementById('notesInput').value.trim();
+    notesIdx = null;
+  }
+  notesModal.hide();
+  renderSequence();
+}
+
+// ---------------------------------------------------------------------------
+// Scoring
+// ---------------------------------------------------------------------------
+async function scoreSequence() {
+  if (!WTD.seq.length) { showToast('Add at least one step first.', 'error'); return; }
+  const btn = document.getElementById('scoreSeqBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-sm me-1"></span>';
+  try {
+    const r = await apiFetch('/api/score', {
+      method: 'POST',
+      body:   JSON.stringify({ sequence: WTD.seq.map(e => e.symbol) }),
+    });
+
+    // Penalty badge
+    const badge = document.getElementById('wtPenaltyBadge');
+    badge.textContent = r.penalty;
+    badge.className = 'penalty-badge-sm ' + (
+      r.penalty === 0 ? 'penalty-0' : r.penalty <= 2 ? 'penalty-lo' : 'penalty-hi'
+    );
+    document.getElementById('wtPenaltyLabel').textContent =
+      r.accepts ? '✓ Accepted — matches the learned automaton'
+                : `⚠ ${r.penalty} correction${r.penalty !== 1 ? 's' : ''} needed`;
+    document.getElementById('wtPenaltyDesc').textContent =
+      r.accepts
+        ? {{ cfg.domain_positive_desc | tojson }}
+        : 'The path deviates from the automaton by ' + r.penalty +
+          ' edit operation' + (r.penalty !== 1 ? 's' : '') + '.';
+
+    // Diff
+    const diffSec  = document.getElementById('wtDiffSection');
+    const diffList = document.getElementById('wtDiffList');
+    if (r.diff && r.diff.length) {
+      diffList.innerHTML = r.diff.map(op => {
+        const cfg = {
+          match:   { cls:'diff-match',   icon:'✓', color:'#15803d', label: op.symbol },
+          extra:   { cls:'diff-extra',   icon:'✕', color:'#b91c1c', label: op.symbol + ' (remove)' },
+          missing: { cls:'diff-missing', icon:'+', color:'#1d4ed8', label: op.symbol + ' (insert)' },
+          wrong:   { cls:'diff-wrong',   icon:'~', color:'#92400e',
+                     label: op.symbol + ' → ' + op.expected },
+        }[op.op];
+        return `<div class="diff-row ${cfg.cls}">
+          <span style="color:${cfg.color};min-width:1.2rem;text-align:center">${cfg.icon}</span>
+          <span class="diff-sym">${cfg.label}</span>
+        </div>`;
+      }).join('');
+      diffSec.style.display = '';
+    } else {
+      diffSec.style.display = 'none';
+    }
+
+    // Corrected path
+    const corrSec  = document.getElementById('wtCorrSection');
+    const corrList = document.getElementById('wtCorrList');
+    if (!r.accepts && r.corrected && r.corrected.length) {
+      corrList.innerHTML = r.corrected.map(s => pillHtml(s, '')).join(
+        '<span class="text-muted mx-1">→</span>'
+      );
+      corrSec.style.display = '';
+    } else {
+      corrSec.style.display = 'none';
+    }
+
+    document.getElementById('scoreResult').style.display = '';
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Score';
+  }
+}
+
+function hideScore() {
+  document.getElementById('scoreResult').style.display = 'none';
+}
+
+// ---------------------------------------------------------------------------
+// Save walkthrough
+// ---------------------------------------------------------------------------
+async function saveWalkthrough() {
+  const name      = document.getElementById('wtName').value.trim();
+  const label     = document.getElementById('wtLabel').value;
+  const desc      = document.getElementById('wtDescription').value.trim();
+  const patientId = document.getElementById('wtPatientId').value.trim();
+
+  if (!name) { showToast('Please enter a {{ cfg.session_noun | lower }} name.', 'error'); return; }
+
+  try {
+    let wt;
+    if (!WTD.id) {
+      // Create
+      wt     = await apiFetch('/api/walkthroughs', {
+        method: 'POST',
+        body:   JSON.stringify({name, label, description: desc, patient_id: patientId}),
+      });
+      WTD.id    = wt.id;
+      WTD.saved = true;
+    } else {
+      // Update metadata
+      wt = await apiFetch(`/api/walkthroughs/${WTD.id}`, {
+        method: 'PUT',
+        body:   JSON.stringify({name, label, description: desc, patient_id: patientId}),
+      });
+    }
+
+    // Sync sequence: delete all existing entries, re-add in order
+    const current = await apiFetch(`/api/walkthroughs/${WTD.id}`);
+    for (const e of current.steps) {
+      await apiFetch(`/api/walkthroughs/${WTD.id}/steps/${e.id}`, {method: 'DELETE'});
+    }
+    for (const item of WTD.seq) {
+      const entry = await apiFetch(`/api/walkthroughs/${WTD.id}/steps`, {
+        method: 'POST',
+        body:   JSON.stringify({step_id: item.stepId, notes: item.notes || ''}),
+      });
+      item.entryId = entry.id;
+    }
+
+    document.getElementById('pageTitle').textContent = 'Edit: ' + name;
+    showToast('{{ cfg.session_noun }} saved');
+    checkConflicts();   // async — runs in background, shows panel if issues found
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Conflict check — runs after every save
+// ---------------------------------------------------------------------------
+async function checkConflicts() {
+  const panel = document.getElementById('conflictPanel');
+  const list  = document.getElementById('conflictList');
+  panel.style.display = 'none';
+  try {
+    const res = await apiFetch('/api/check-conflicts', {method: 'POST'});
+    if (res.skipped || !res.conflicts.length) return;
+    list.innerHTML = res.conflicts.map(c => {
+      const pid = c.patient_id ? `<span class="text-muted ms-1"><i class="bi bi-person"></i> ${c.patient_id}</span>` : '';
+      const seq = c.sequence.map(s =>
+        `<span class="symbol-pill" style="font-size:.72rem">${s}</span>`
+      ).join('<span class="text-muted mx-1" style="font-size:.8rem">→</span>');
+      return `<div class="mb-2 pb-2 border-bottom">
+        <div class="fw-semibold small"><a href="/walkthroughs/${c.id}/edit" class="text-danger text-decoration-none">${c.name}</a>${pid}</div>
+        <div class="mt-1 d-flex flex-wrap gap-1">${seq}</div>
+      </div>`;
+    }).join('');
+    panel.style.display = '';
+  } catch(_) {
+    // Conflict check failure is non-fatal — silently ignore
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Create new step from editor
+// ---------------------------------------------------------------------------
+const newStepModal = new bootstrap.Modal(document.getElementById('newStepModal'));
+
+async function createNewStep() {
+  const errEl = document.getElementById('nsError');
+  errEl.classList.add('d-none');
+  const body = {
+    action:      document.getElementById('nsAction').value.trim(),
+    data:        document.getElementById('nsData').value.trim(),
+    category:    document.getElementById('nsCategory').value.trim(),
+    description: document.getElementById('nsDescription').value.trim(),
+  };
+  if (!body.action) {
+    errEl.textContent = 'Action is required.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  try {
+    const s = await apiFetch('/api/steps', {method: 'POST', body: JSON.stringify(body)});
+    WTD.allSteps.push(s);
+    buildCatFilter();
+    filterLibrary();
+    appendStep(s.id);
+    newStepModal.hide();
+    showToast(`Step "${s.symbol}" created and added`);
+    // Reset form
+    ['nsAction','nsData','nsCategory','nsDescription'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('d-none');
+  }
+}
+</script>
+{% endblock %}

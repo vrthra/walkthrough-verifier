@@ -1,0 +1,21 @@
+{
+  "db_dir": "/Users/rahul.gopinath/Research/Vietnam/airport_module1/data",
+  "app_name": "Passenger Flow Tool",
+  "app_subtitle": "Journey Definition — Module 1",
+  "app_icon": "bi-airplane-fill",
+  "step_library_name": "Event Library",
+  "meta_library_name": "State Library",
+  "entity_id_label": "Passenger / Booking ID",
+  "entity_id_placeholder": "e.g. PAX-00142",
+  "session_noun": "Journey",
+  "session_noun_plural": "Journeys",
+  "step_noun": "Event",
+  "step_noun_plural": "Events",
+  "sequence_label": "Passenger journey",
+  "walkthrough_name_example": "e.g. London Heathrow — short connection",
+  "step_action_example": "e.g. CHECK_IN",
+  "domain_positive_desc": "This journey is consistent with valid passenger flow procedures.",
+  "domain_negative_desc": "Negative journeys are rejected examples — passenger flows known to be invalid or unsafe. RPNI uses them as constraints to ensure the automaton never accepts these sequences.",
+  "domain_alphabet_note": "Each row is one event in the passenger flow alphabet. The symbol is the action:outcome pair — Category and Description are metadata only and do not affect automaton learning.",
+  "domain_meta_desc": "The non-terminal (DFA state) symbols used in the flow grammar. Rename any state; its key updates in the Visualization immediately. The Role is structural and cannot be changed."
+}

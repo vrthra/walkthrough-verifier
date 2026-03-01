@@ -1,0 +1,21 @@
+{
+  "db_dir": "/Users/rahul.gopinath/Research/Vietnam/triage_module1/data",
+  "app_name": "Triage Tool",
+  "app_subtitle": "Walkthrough Definition \u2014 Module 1",
+  "app_icon": "bi-heart-pulse-fill",
+  "step_library_name": "Step Library",
+  "meta_library_name": "Meta Library",
+  "entity_id_label": "Patient / Encounter ID",
+  "entity_id_placeholder": "e.g. PT-00142",
+  "session_noun": "Walkthrough",
+  "session_noun_plural": "Walkthroughs",
+  "step_noun": "Step",
+  "step_noun_plural": "Steps",
+  "sequence_label": "Triage sequence",
+  "walkthrough_name_example": "e.g. Chest pain \u2014 stable adult",
+  "step_action_example": "e.g. BP_CHECK",
+  "domain_positive_desc": "This path is consistent with known-good triage practice.",
+  "domain_negative_desc": "Negative walkthroughs are rejected examples \u2014 paths known to be incorrect. RPNI uses them as constraints to ensure the automaton never accepts these sequences.",
+  "domain_alphabet_note": "Each row is one symbol in the domain alphabet. The symbol is the action:data pair \u2014 Category and Description are metadata only and do not affect automaton learning.",
+  "domain_meta_desc": "The non-terminal (DFA state) symbols used in the grammar. Rename any state; its key updates in the Visualization immediately. The Role is structural and cannot be changed."
+}

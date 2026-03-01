@@ -1,0 +1,619 @@
+{% extends "base.html" %}
+
+{% block title %}Visualization — Triage Tool{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Layout ────────────────────────────────────────────────────────── */
+  #grammarWrap {
+    display: flex;
+    gap: 1rem;
+    height: calc(100vh - 130px);
+    min-height: 400px;
+  }
+  /* Left: raw JSON pane — hidden by default, toggled via JS */
+  #grammarBox {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: .78rem;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    white-space: pre;
+    overflow: auto;
+    flex: 0 0 340px;
+    line-height: 1.6;
+    display: none;   /* hidden until user clicks Show JSON */
+  }
+  /* Syntax highlights */
+  .g-nt    { color: #7dd3fc; }
+  .g-sym   { color: #86efac; }
+  .g-empty { color: #fbbf24; }
+
+  /* Right: railroad pane — fills all space when JSON is hidden */
+  #vizPane {
+    flex: 1 1 auto;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    overflow: auto;
+    background: #fff;
+    padding: 1rem;
+    position: relative;
+  }
+  #vizFeedback {
+    color: #c00; font-size: .8rem; margin-bottom: .5rem;
+  }
+  /* Railroad elements — base style; JS overrides bg per-node */
+  .terminal {
+    border: 1px solid rgba(0,0,0,.25); border-radius: 6px; padding: 2px 5px;
+    background: #ffe; display: inline-block; text-align: center; white-space: nowrap;
+  }
+  .nonterminal {
+    border: 1px solid rgba(0,0,0,.25); padding: 2px 5px;
+    background: #efe; display: inline-block; white-space: nowrap;
+  }
+  /* State header strip */
+  .state-header-dot {
+    display:inline-block;width:10px;height:10px;border-radius:50%;
+    border:1px solid rgba(0,0,0,.2);margin-right:5px;vertical-align:middle;
+  }
+  #railroad-diagram { overflow: auto; }
+  /* Prevent state heading labels from wrapping — let the pane scroll instead */
+  #railroad-diagram > div > a { white-space: nowrap; }
+  /* Edit button next to state headings */
+  .btn-edit-state-inline {
+    opacity: 0;
+    transition: opacity .15s;
+    vertical-align: middle;
+    padding: 0 5px;
+    font-size: .75rem;
+    line-height: 1.4;
+  }
+  div:hover > a > .btn-edit-state-inline,
+  div:hover > .btn-edit-state-inline {
+    opacity: 1;
+  }
+</style>
+
+<!-- Railroad library (inline) -->
+<script>
+var railroad = (function () {
+var borderBottomLeftRadius = 'borderBottomLeftRadius',
+    borderBottomRightRadius = 'borderBottomRightRadius',
+    borderTopLeftRadius = 'borderTopLeftRadius',
+    borderTopRightRadius = 'borderTopRightRadius';
+(function () {
+  var style = document.createElement('DIV').style;
+  if (style.borderBottomLeftRadius !== 'string') {
+    if (typeof style.MozBorderRadiusBottomleft === 'string') {
+      borderBottomLeftRadius = 'MozBorderRadiusBottomleft';
+      borderBottomRightRadius = 'MozBorderRadiusBottomright';
+      borderTopLeftRadius = 'MozBorderRadiusTopleft';
+      borderTopRightRadius = 'MozBorderRadiusTopright';
+    } else if (typeof style.WebkitBorderRadiusBottomLeft === 'string') {
+      borderBottomLeftRadius = 'WebkitBorderRadiusBottomLeft';
+      borderBottomRightRadius = 'WebkitBorderRadiusBottomRight';
+      borderTopLeftRadius = 'WebkitBorderRadiusTopLeft';
+      borderTopRightRadius = 'WebkitBorderRadiusTopRight';
+    }
+  }
+})();
+function toNode(c){if(typeof c==='string'){return{op:'html',content:c};}else if(typeof c==='object'&&typeof c.op==='string'){return c;}throw new Error(c);}
+function or(a){var opts=[],seen={};function add(c){switch(c.op){case'|':for(var i=0,n=c.children.length;i<n;++i){add(c.children[i]);}break;case'html':if(seen[c.content]!==seen){seen[c.content]=seen;opts.push(c);}break;default:opts.push(toNode(c));break;}}for(var i=0,n=a.length;i<n;++i){add(a[i]);}if(opts.length==1){return opts[0];}return{op:'|',children:opts};}
+function maybe(c){return or([toNode('\u25b6'),toNode(c)]);}
+function any(c,lb){return maybe(many(c,lb));}
+function many(c,lb){return{op:'+',children:[c],loopback:lb?toNode(lb):null};}
+function each(a){var items=[];function add(item){if(item.op==='.'){for(var i=0,n=item.children.length;i<n;++i){add(item.children[i]);}}else{items.push(toNode(item));}}for(var i=0,n=a.length;i<n;++i){add(a[i]);}return{op:'.',children:items};}
+function appendToDOM(node,parent,opt_stats){
+  var document=parent.ownerDocument;
+  node=toNode(node);
+  var div=document.createElement('DIV');
+  div.style.display='inline-block';div.style.position='absolute';
+  parent.appendChild(div);
+  if(node.op==='html'){div.innerHTML=node.content;if(node.content==='\u25b6'){div.style.fontSize=div.style.height='8px';}if(opt_stats){opt_stats.width=div.offsetWidth;opt_stats.height=div.offsetHeight;}return div;}
+  var children=[];var n=node.children.length;
+  for(var i=0;i<n;++i){children[i]=appendToDOM(node.children[i],div);}
+  function renderArrowhead(t,p){var a=document.createElement('SPAN');p.insertBefore(a,p.firstChild);a.appendChild(document.createTextNode(t));a.style.position='absolute';a.style.display='inline-block';a.style.left='0px';a.style.top='-5px';a.style.width='100%';a.style.height='8px';a.style.fontSize='8px';a.style.textAlign='center';a.style.verticalAlign='middle';}
+  function rightArrow(x,w,y,h,jx){if(!h){var s=document.createElement('SPAN');s.style.position='absolute';s.style.left=x+'px';s.style.width=w+'px';s.style.top=y+'px';s.style.height='0px';s.style.borderBottom='1px solid #000';div.appendChild(s);}else{if(jx===void 0){jx=x+(w>>1);}var hh=(Math.abs(h)+1)>>1;var l=document.createElement('SPAN');l.style.position='absolute';l.style.left=x+'px';l.style.width=(jx-x)+'px';if(h>0){l.style.top=y+'px';l.style.height=hh+'px';l.style.borderTop='1px solid #000';l.style[borderTopRightRadius]='6px';}else{l.style.top=(y-hh)+'px';l.style.height=hh+'px';l.style.borderBottom='1px solid #000';l.style[borderBottomRightRadius]='6px';}l.style.borderRight='1px solid #000';div.insertBefore(l,div.firstChild);var r=document.createElement('SPAN');r.style.position='absolute';r.style.left=jx+'px';r.style.width=(x+w-jx)+'px';if(h>0){r.style.top=(y+hh)+'px';r.style.height=(h-hh)+'px';r.style.borderBottom='1px solid #000';r.style[borderBottomLeftRadius]='6px';}else{r.style.top=(y+h)+'px';r.style.height=hh+'px';r.style.borderTop='1px solid #000';r.style[borderTopLeftRadius]='6px';}r.style.borderLeft='1px solid #000';div.insertBefore(r,div.firstChild);}}
+  var width=0,height=0;
+  switch(node.op){
+    case'|':for(var i=0;i<n;++i){var child=children[i];width=Math.max(width,32+child.offsetWidth);}var cyc=[],lx=[],rx=[];for(var i=0;i<n;++i){if(i){height+=16;}var child=children[i];child.style.top=height+'px';var ch=child.offsetHeight,cw=child.offsetWidth;var lxi=((width-cw)>>1),rxi=lxi+cw;child.style.left=lxi+'px';lx[i]=lxi;rx[i]=rxi;cyc[i]=height+(ch>>1);height+=ch;}var cy=(height>>1);for(var i=0;i<n;++i){rightArrow(0,lx[i],cy,cyc[i]-cy,8);rightArrow(rx[i],width-rx[i],cyc[i],cy-cyc[i],width-8);}break;
+    case'+':var child=children[0];var lb=document.createElement('SPAN');div.insertBefore(lb,div.firstChild);var minH=8,lbn,vp=0;if(node.loopback){lbn=appendToDOM(node.loopback,div);height=Math.max(minH,lbn.offsetHeight);width=Math.max(child.offsetWidth,lbn.offsetWidth)+32;lbn.style.top=((height-lbn.offsetHeight)>>1)+'px';lbn.style.left=((width-lbn.offsetWidth)>>1)+'px';height+=4;}else{height=minH;width=child.offsetWidth+32;}child.style.top=height+'px';child.style.left=((width-child.offsetWidth)>>1)+'px';height=height*2+child.offsetHeight;var cy=(height>>1);lb.style.display='inline-block';lb.style.borderLeft=lb.style.borderRight=lb.style.borderTop='1px solid #000';lb.style[borderTopLeftRadius]=lb.style[borderTopRightRadius]='6px';lb.style.position='absolute';lb.style.left='8px';var lbt=lbn?(lbn.offsetHeight>>1):0;lb.style.top=lbt+'px';lb.style.height=(cy-lbt-8)+'px';lb.style.width=(width-16)+'px';lb=document.createElement('SPAN');lb.style.display='inline-block';lb.style.borderLeft=lb.style.borderBottom='1px solid #000';lb.style[borderBottomLeftRadius]='6px';lb.style.position='absolute';lb.style.left='8px';lb.style.top=(cy-12)+'px';lb.style.width='8px';lb.style.height='12px';div.insertBefore(lb,div.firstChild);lb=document.createElement('SPAN');lb.style.display='inline-block';lb.style.borderRight=lb.style.borderBottom='1px solid #000';lb.style[borderBottomRightRadius]='6px';lb.style.position='absolute';lb.style.left=(width-16)+'px';lb.style.top=(cy-12)+'px';lb.style.width='8px';lb.style.height='12px';div.insertBefore(lb,div.firstChild);if(!lbn){renderArrowhead('\u25C0',div);}rightArrow(0,16,cy,0);rightArrow(width-16,16,cy,0);break;
+    case'.':for(var i=0;i<n;++i){var child=children[i];height=Math.max(height,child.offsetHeight);}rightArrow(0,16,(height>>1),0);width=16;for(var i=0;i<n;++i){var child=children[i];child.style.left=width+'px';width+=child.offsetWidth;rightArrow(width,16,(height>>1),0);width+=16;child.style.top=((height-child.offsetHeight)>>1)+'px';}break;
+    default:throw new Error(node.op);
+  }
+  div.style.width=width+'px';div.style.height=height+'px';
+  if(opt_stats){opt_stats.width=width;opt_stats.height=height;}
+  return div;
+}
+return {any:any,each:each,many:many,maybe:maybe,or:or,appendToDOM:appendToDOM};
+})();
+</script>
+{% endblock %}
+
+{% block topbar %}
+  <i class="bi bi-diagram-2 text-muted me-2"></i>
+  <h5 class="me-auto">Visualization</h5>
+  {% if grammar_str %}
+  <span id="stateCount" class="badge bg-secondary me-3" style="font-size:.8rem"></span>
+  <button class="btn btn-sm btn-outline-secondary me-1" onclick="copyGrammar()">
+    <i class="bi bi-clipboard me-1"></i> Copy
+  </button>
+  <button class="btn btn-sm btn-outline-secondary me-1" id="toggleJsonBtn" onclick="toggleJson()">
+    <i class="bi bi-code-slash me-1"></i> Show JSON
+  </button>
+  <button class="btn btn-sm btn-outline-secondary me-2" id="compressBtn" onclick="toggleCompress()">
+    <i class="bi bi-arrows-collapse me-1"></i> Compress
+  </button>
+  {% endif %}
+  <button class="btn btn-sm btn-outline-primary" id="trainBtn" onclick="trainModel()">
+    <i class="bi bi-cpu me-1"></i> Train RPNI
+  </button>
+{% endblock %}
+
+{% block content %}
+
+<!-- Model status banner -->
+<div id="modelBanner" class="alert mb-3 py-2 small
+    {{ 'alert-success' if model_info and model_info.trained else 'alert-secondary' }}">
+  {% if model_info and model_info.trained %}
+    <i class="bi bi-check-circle-fill me-1"></i>
+    Model trained — <strong>{{ model_info.positive_count }}</strong> positive /
+    <strong>{{ model_info.negative_count }}</strong> negative {{ cfg.session_noun_plural | lower }},
+    <strong>{{ model_info.dfa_states }}</strong> DFA states,
+    <strong>{{ model_info.alphabet_size }}</strong> symbols.
+    Click <em>Train RPNI</em> to retrain after adding {{ cfg.session_noun_plural | lower }}.
+  {% else %}
+    <i class="bi bi-info-circle me-1"></i>
+    No trained model yet — click <strong>Train RPNI</strong> to build the automaton from your {{ cfg.session_noun_plural | lower }}.
+  {% endif %}
+</div>
+
+{% if grammar_str %}
+
+<div class="alert alert-info small mb-3 py-2">
+  <i class="bi bi-info-circle me-1"></i>
+  DFA grammar. Nonterminals (<code>&lt;start&gt;</code>, <code>&lt;triage&gt;</code>, …) are states;
+  terminals are triage symbols. States with an empty rule <code>[]</code> are accepting states.
+</div>
+
+<div id="grammarWrap">
+  <!-- Left: JSON text -->
+  <div id="grammarBox">{{ grammar_str }}</div>
+
+  <!-- Right: railroad diagram -->
+  <div id="vizPane">
+    <div id="vizFeedback"></div>
+    <div id="railroad-diagram"></div>
+  </div>
+</div>
+
+{% else %}
+
+<div class="empty-state mt-5">
+  <i class="bi bi-diagram-2"></i>
+  No trained model yet. Click <strong>Train RPNI</strong> above to build the automaton.
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if grammar_str %}
+<script>
+// ── Railroad helpers ────────────────────────────────────────────────────────
+var each  = railroad.each,
+    or    = railroad.or;
+
+// Color maps populated from the API response
+var NT_COLORS   = {};   // "<triage>" → "#0d6efd"
+var TERM_COLORS = {};   // "VITAL_SIGNS:ABNORMAL" → "#dc3545"
+
+// Grammar-state lookup: name → {id, name, role, category, description, color}
+var _stateMap = {};
+fetch('/api/grammar-states')
+  .then(function(r){ return r.json(); })
+  .then(function(rows){ rows.forEach(function(s){ _stateMap[s.name] = s; }); })
+  .catch(function(){}); // non-fatal
+
+// Grammar state
+var ORIG_GRAMMAR  = null;   // full grammar from API
+var ORIG_START    = null;
+var _isCompressed = false;
+
+// ── Grammar compression ──────────────────────────────────────────────────────
+/**
+ * Inline every non-terminal that has exactly one production rule into all
+ * its call sites, then delete it.  Repeat until fixed point.
+ *
+ * Rules:
+ *  - Never inline the start symbol (it is the grammar's entry point).
+ *  - Never inline a self-referential rule (would create an infinite loop).
+ *  - Empty rules (ε / accept markers) count as one rule, so accepting states
+ *    with no other alternatives are also inlined.
+ *
+ * Returns a new grammar object (original is not mutated).
+ */
+function compressGrammar(grammar, start) {
+  var g = JSON.parse(JSON.stringify(grammar));  // deep clone
+
+  var changed = true;
+  while (changed) {
+    changed = false;
+    for (var nt in g) {
+      if (nt === start) continue;              // never touch the start symbol
+      if (g[nt].length !== 1) continue;       // only inline single-rule NTs
+
+      var rule = g[nt][0];                    // the one and only alternative
+      if (rule.indexOf(nt) !== -1) continue;  // skip self-referential rules
+
+      // Replace every occurrence of nt in every other rule's RHS
+      for (var other in g) {
+        if (other === nt) continue;
+        g[other] = g[other].map(function(alt) {
+          var newAlt = [];
+          for (var i = 0; i < alt.length; i++) {
+            if (alt[i] === nt) {
+              // Splice in the inlined rule's symbols
+              for (var j = 0; j < rule.length; j++) newAlt.push(rule[j]);
+            } else {
+              newAlt.push(alt[i]);
+            }
+          }
+          return newAlt;
+        });
+      }
+
+      delete g[nt];
+      changed = true;
+      break;  // restart — the grammar just changed
+    }
+  }
+  return g;
+}
+
+function toggleCompress() {
+  if (!ORIG_GRAMMAR) return;
+  _isCompressed = !_isCompressed;
+  var btn = document.getElementById('compressBtn');
+  if (_isCompressed) {
+    var compressed = compressGrammar(ORIG_GRAMMAR, ORIG_START);
+    loadGrammar(compressed, ORIG_START, true);
+    btn.innerHTML = '<i class="bi bi-arrows-expand me-1"></i> Expand';
+    btn.classList.replace('btn-outline-secondary', 'btn-secondary');
+  } else {
+    loadGrammar(ORIG_GRAMMAR, ORIG_START, false);
+    btn.innerHTML = '<i class="bi bi-arrows-collapse me-1"></i> Compress';
+    btn.classList.replace('btn-secondary', 'btn-outline-secondary');
+  }
+}
+
+function htmlEsc(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/** Lighten a hex color for use as background (mix with white). */
+function lighten(hex, amount) {
+  // amount 0–1, 0 = original, 1 = white
+  var r = parseInt(hex.slice(1,3),16),
+      g = parseInt(hex.slice(3,5),16),
+      b = parseInt(hex.slice(5,7),16);
+  r = Math.round(r + (255-r)*amount);
+  g = Math.round(g + (255-g)*amount);
+  b = Math.round(b + (255-b)*amount);
+  return '#' + [r,g,b].map(function(v){return v.toString(16).padStart(2,'0')}).join('');
+}
+
+function terminal(sym) {
+  var color  = TERM_COLORS[sym] || '#6c757d';
+  var bg     = lighten(color, 0.85);
+  var border = lighten(color, 0.3);
+  return '<span class="terminal" style="background:' + bg + ';border-color:' + border + ';color:#111">'
+       + '<kbd style="background:none;color:inherit;font-size:.78rem">' + htmlEsc(sym) + '</kbd></span>';
+}
+
+function nonTerminal(name) {
+  var key    = '<' + name + '>';
+  var color  = NT_COLORS[key] || '#6c757d';
+  var bg     = lighten(color, 0.82);
+  var border = lighten(color, 0.3);
+  var style  = 'background:' + bg + ';border-color:' + border + ';color:#111';
+  var id = name + '-railroad';
+  if (document.getElementById(id)) {
+    return '<span class="nonterminal" style="' + style + '">'
+         + '<a style="text-decoration:none;color:inherit" href="#' + htmlEsc(name) + '_railroad">'
+         + htmlEsc(key) + '</a></span>';
+  }
+  return '<span class="nonterminal" style="' + style + '">' + htmlEsc(key) + '</span>';
+}
+
+function loadGrammar(g, startSymbol, compressed) {
+  var rr = document.getElementById('railroad-diagram');
+  rr.innerHTML = '';
+  // Build anchors first
+  for (var key in g) {
+    var sname   = key.slice(1,-1);
+    var isStart = (key === startSymbol);
+    var color   = NT_COLORS[key] || '#6c757d';
+    var dotHtml = '<span class="state-header-dot" style="background:' + color + '"></span>';
+    var label = isStart
+      ? '<span style="display:inline-flex;align-items:center;gap:.4rem">'
+        + dotHtml
+        + '<span style="font-size:1.1rem;color:' + color + '" title="Entry point — patient enters">&#9654;</span>'
+        + '<b>' + htmlEsc(key) + '</b>'
+        + '<span style="font-size:.75rem;color:#6c757d;font-weight:normal">(entry point)</span>'
+        + '</span>'
+      : dotHtml + '<b>' + htmlEsc(key) + '</b>';
+    // Edit button — populated from _stateMap (may be empty for RPNI-numbered states)
+    var st = _stateMap[sname];
+    var editBtn = st
+      ? '<button class="btn btn-sm btn-outline-secondary btn-edit-state-inline btn-edit-state"'
+          + ' data-id="'          + htmlEsc(String(st.id))               + '"'
+          + ' data-name="'        + htmlEsc(st.name)                     + '"'
+          + ' data-role="'        + htmlEsc(st.role || '')               + '"'
+          + ' data-category="'    + htmlEsc(st.category || 'Meta')       + '"'
+          + ' data-description="' + htmlEsc(st.description || '')        + '"'
+          + ' data-color="'       + htmlEsc(st.color || '#6c757d')       + '"'
+          + ' title="Edit &lt;' + htmlEsc(sname) + '&gt;">'
+          + '<i class="bi bi-pencil"></i>'
+          + '</button>'
+      : '';
+    rr.innerHTML += '<div style="margin-bottom:1.2rem">'
+      + '<a id="' + sname + '_railroad">' + label + '</a>'
+      + editBtn + '<br>'
+      + '<div id="' + sname + '-railroad" style="position:relative;display:inline-block;margin-top:.3rem"></div>'
+      + '</div>';
+  }
+  // Render each rule
+  for (var key in g) {
+    var sname = key.slice(1,-1);
+    var container = document.getElementById(sname + '-railroad');
+    if (!container) continue;
+    var rules = g[key];
+    var alts = [];
+    for (var i = 0; i < rules.length; i++) {
+      var rule = rules[i];
+      if (!rule || rule.length === 0) {
+        alts.push({ op: 'html', content: '<span style="color:#b45309;font-size:.8rem">ε&nbsp;(accept)</span>' });
+      } else {
+        var parts = [];
+        for (var j = 0; j < rule.length; j++) {
+          var tok = rule[j];
+          if (tok.startsWith('<') && tok.endsWith('>')) {
+            parts.push({ op: 'html', content: nonTerminal(tok.slice(1,-1)) });
+          } else {
+            parts.push({ op: 'html', content: terminal(tok) });
+          }
+        }
+        alts.push(each(parts));
+      }
+    }
+    var root = alts.length === 1 ? alts[0] : or(alts);
+    var stats = {};
+    railroad.appendToDOM(root, container, stats);
+    container.style.width  = stats.width  + 'px';
+    container.style.height = stats.height + 'px';
+  }
+  var n = Object.keys(g).length;
+  var el = document.getElementById('stateCount');
+  if (el) el.textContent = n + ' state' + (n !== 1 ? 's' : '') + (compressed ? ' (compressed)' : '');
+}
+
+// ── Syntax-highlight the JSON box ──────────────────────────────────────────
+(function highlight() {
+  var box = document.getElementById('grammarBox');
+  if (!box) return;
+  var t = box.textContent;
+  t = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // nonterminal keys / refs: &lt;...&gt;
+  t = t.replace(/(&lt;[^&"]+&gt;)/g, '<span class="g-nt">$1</span>');
+  // empty arrays []
+  t = t.replace(/\[\]/g, '<span class="g-empty">[]</span>');
+  box.innerHTML = t;
+})();
+
+// ── Load & render grammar ───────────────────────────────────────────────────
+fetch('/api/grammar-json')
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if (data.error) {
+      document.getElementById('vizFeedback').textContent = data.error;
+    } else {
+      NT_COLORS    = data.nt_colors   || {};
+      TERM_COLORS  = data.term_colors || {};
+      ORIG_GRAMMAR = data.grammar;
+      ORIG_START   = data.start;
+      loadGrammar(ORIG_GRAMMAR, ORIG_START, false);
+      if (data.is_default) {
+        var el = document.getElementById('stateCount');
+        if (el) el.textContent = 'demo grammar';
+        // Hide compress button — demo grammar is hand-crafted, not a trained DFA
+        var cb = document.getElementById('compressBtn');
+        if (cb) cb.style.display = 'none';
+      }
+    }
+  })
+  .catch(function(e){
+    document.getElementById('vizFeedback').textContent = 'Could not render diagram: ' + e;
+  });
+
+// ── Copy ────────────────────────────────────────────────────────────────────
+function copyGrammar() {
+  var raw = document.getElementById('grammarBox').innerText;
+  navigator.clipboard.writeText(raw).then(function(){ showToast('Grammar copied to clipboard'); });
+}
+
+// ── Toggle JSON pane ─────────────────────────────────────────────────────────
+function toggleJson() {
+  var box = document.getElementById('grammarBox');
+  var btn = document.getElementById('toggleJsonBtn');
+  var shown = box.style.display !== 'none';
+  box.style.display = shown ? 'none' : 'block';
+  btn.innerHTML = shown
+    ? '<i class="bi bi-code-slash me-1"></i> Show JSON'
+    : '<i class="bi bi-code-slash me-1"></i> Hide JSON';
+}
+
+// ── Edit-state modal (delegated click) ───────────────────────────────────────
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.btn-edit-state');
+  if (!btn) return;
+  var ds = btn.dataset;
+  document.getElementById('editStateId').value   = ds.id;
+  document.getElementById('fRole').value         = ds.role;
+  document.getElementById('fName').value         = ds.name;
+  document.getElementById('fCategory').value     = ds.category;
+  document.getElementById('fDescription').value  = ds.description;
+  document.getElementById('fColor').value        = ds.color || '#6c757d';
+  document.getElementById('stateFormError').classList.add('d-none');
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('stateModal')).show();
+});
+
+function applyStateColorPreset(sel) {
+  if (sel.value) document.getElementById('fColor').value = sel.value;
+  sel.value = '';
+}
+
+async function saveState() {
+  var btn   = document.getElementById('saveStateBtn');
+  var errEl = document.getElementById('stateFormError');
+  errEl.classList.add('d-none');
+  var id   = document.getElementById('editStateId').value;
+  var body = {
+    name:        document.getElementById('fName').value.trim(),
+    category:    document.getElementById('fCategory').value.trim() || 'Meta',
+    description: document.getElementById('fDescription').value.trim(),
+    color:       document.getElementById('fColor').value.trim(),
+  };
+  if (!body.name) {
+    errEl.textContent = 'Name is required.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await apiFetch('/api/grammar-states/' + id, { method: 'PUT', body: JSON.stringify(body) });
+    // Update stateMap and re-render
+    var rows = await apiFetch('/api/grammar-states');
+    _stateMap = {};
+    rows.forEach(function(s){ _stateMap[s.name] = s; });
+    var data = await apiFetch('/api/grammar-json');
+    NT_COLORS    = data.nt_colors   || {};
+    TERM_COLORS  = data.term_colors || {};
+    ORIG_GRAMMAR = data.grammar;
+    ORIG_START   = data.start;
+    loadGrammar(ORIG_GRAMMAR, ORIG_START, _isCompressed);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('stateModal')).hide();
+    showToast('Grammar state updated');
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('d-none');
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+
+<!-- ── Edit Grammar State modal ─────────────────────────────────────────── -->
+<div class="modal fade" id="stateModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Grammar State</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editStateId"/>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Role</label>
+          <input id="fRole" class="form-control font-monospace" disabled>
+          <div class="form-text">Structural role — cannot be changed.</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <span class="input-group-text font-monospace">&lt;</span>
+            <input id="fName" class="form-control font-monospace"
+                   placeholder="e.g. triage"
+                   oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9\-]/g,'-')">
+            <span class="input-group-text font-monospace">&gt;</span>
+          </div>
+          <div class="form-text">Lowercase, hyphen-separated. This becomes the grammar key.</div>
+        </div>
+
+        <hr/>
+        <p class="text-muted small mb-2">Metadata — does not affect grammar key:</p>
+
+        <div class="mb-3">
+          <label class="form-label">Category</label>
+          <input id="fCategory" class="form-control" value="Meta" placeholder="Meta">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea id="fDescription" class="form-control" rows="2"
+                    placeholder="Optional human-readable description"></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Colour</label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="color" id="fColor" class="form-control form-control-color"
+                   style="width:46px;height:38px;padding:2px;cursor:pointer" value="#6c757d">
+            <select class="form-select form-select-sm" onchange="applyStateColorPreset(this)">
+              <option value="">— quick pick —</option>
+              <option value="#6c757d">⚫ Grey — start / neutral</option>
+              <option value="#0d6efd">🔵 Blue — triage waiting</option>
+              <option value="#fd7e14">🟠 Orange — active assessment</option>
+              <option value="#198754">🟢 Green — routing done / exit</option>
+              <option value="#0dcaf0">🩵 Teal — complete</option>
+              <option value="#dc3545">🔴 Red — error / rejected</option>
+            </select>
+          </div>
+          <div class="form-text">Shown as a dot next to the state key.</div>
+        </div>
+
+        <div id="stateFormError" class="alert alert-danger d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="saveStateBtn" onclick="saveState()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Train button works whether or not a grammar is currently shown -->
+<script>
+async function trainModel() {
+  var btn = document.getElementById('trainBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Training…';
+  try {
+    var res = await apiFetch('/api/train', {method: 'POST'});
+    var i = res.info;
+    var banner = document.getElementById('modelBanner');
+    banner.className = 'alert alert-success mb-3 py-2 small';
+    banner.innerHTML =
+      '<i class="bi bi-check-circle-fill me-1"></i>'
+      + ' Model trained — <strong>' + i.positive_count + '</strong> positive / '
+      + '<strong>' + i.negative_count + '</strong> negative {{ cfg.session_noun_plural | lower }}, '
+      + '<strong>' + i.dfa_states + '</strong> DFA states, '
+      + '<strong>' + i.alphabet_size + '</strong> symbols. '
+      + 'Click <em>Train RPNI</em> to retrain after adding {{ cfg.session_noun_plural | lower }}.';
+    showToast('Model trained — reloading diagram…');
+    // Reload the page after a short delay so the new grammar is rendered
+    setTimeout(function(){ window.location.reload(); }, 1200);
+  } catch(e) {
+    showToast(e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-cpu me-1"></i> Train RPNI';
+  }
+}
+</script>
+{% endblock %}

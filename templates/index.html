@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Triage Tool{% endblock %}
+
+{% block topbar %}
+  <i class="bi bi-speedometer2 text-muted me-2"></i>
+  <h5>Dashboard</h5>
+{% endblock %}
+
+{% block content %}
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card shadow-sm">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="stat-icon" style="background:#e3f2fd">
+          <i class="bi bi-grid-3x3-gap" style="color:#1565c0"></i>
+        </div>
+        <div>
+          <div class="fw-bold fs-4">{{ step_count }}</div>
+          <div class="text-muted small">Alphabet symbols</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card shadow-sm">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="stat-icon" style="background:#e8f5e9">
+          <i class="bi bi-diagram-3" style="color:#2e7d32"></i>
+        </div>
+        <div>
+          <div class="fw-bold fs-4">{{ wt_count }}</div>
+          <div class="text-muted small">{{ cfg.session_noun_plural }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card shadow-sm">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="stat-icon" style="background:#e8f5e9">
+          <i class="bi bi-check-circle" style="color:#388e3c"></i>
+        </div>
+        <div>
+          <div class="fw-bold fs-4">{{ positive_count }}</div>
+          <div class="text-muted small">Positive examples</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card shadow-sm">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="stat-icon" style="background:#fce4ec">
+          <i class="bi bi-x-circle" style="color:#c62828"></i>
+        </div>
+        <div>
+          <div class="fw-bold fs-4">{{ negative_count }}</div>
+          <div class="text-muted small">Negative examples</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Recent walkthroughs -->
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Recent {{ cfg.session_noun_plural | lower }}</span>
+        <a href="{{ url_for('walkthroughs_page') }}" class="btn btn-sm btn-outline-secondary">
+          View all
+        </a>
+      </div>
+      <div class="card-body p-0">
+        {% if recent_wts %}
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th class="ps-3">Name</th>
+              <th>Label</th>
+              <th>Steps</th>
+              <th>Last updated</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for wt in recent_wts %}
+            <tr>
+              <td class="ps-3 fw-medium">{{ wt.name }}</td>
+              <td>
+                <span class="badge badge-{{ wt.label }}">{{ wt.label }}</span>
+              </td>
+              <td>{{ wt.entries|length }}</td>
+              <td class="text-muted">{{ wt.updated_at.strftime('%d %b %Y') }}</td>
+              <td>
+                <a href="{{ url_for('edit_walkthrough_page', wt_id=wt.id) }}"
+                   class="btn btn-sm btn-outline-primary">Edit</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+          <i class="bi bi-diagram-3"></i>
+          No {{ cfg.session_noun_plural | lower }} yet.
+          <a href="{{ url_for('new_walkthrough_page') }}">Create one</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="col-lg-5">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-semibold">Quick actions</div>
+      <div class="card-body d-grid gap-2">
+        <a href="{{ url_for('new_walkthrough_page') }}"
+           class="btn btn-primary">
+          <i class="bi bi-plus-circle me-1"></i> New {{ cfg.session_noun | lower }}
+        </a>
+        <a href="{{ url_for('steps_page') }}"
+           class="btn btn-outline-secondary">
+          <i class="bi bi-grid-3x3-gap me-1"></i> Manage step library
+        </a>
+        <a href="/api/export" class="btn btn-outline-success">
+          <i class="bi bi-download me-1"></i> Export JSON for RPNI
+        </a>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white fw-semibold">Step categories</div>
+      <div class="card-body">
+        {% if categories %}
+          {% for cat in categories %}
+          <a href="{{ url_for('steps_page') }}?category={{ cat }}"
+             class="badge text-decoration-none me-1 mb-1"
+             style="background:#e3eef7;color:#1a6b9a;font-size:.8rem">
+            {{ cat }}
+          </a>
+          {% endfor %}
+        {% else %}
+          <span class="text-muted small">No categories defined yet.</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
