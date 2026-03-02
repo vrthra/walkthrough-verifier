@@ -1,6 +1,6 @@
 {
   "db_dir": "/Users/rahul.gopinath/Research/Vietnam/airport_module1/data",
-  "app_name": "Passenger Flow Tool",
+  "app_name": "Airport Handling",
   "app_subtitle": "Journey Definition — Module 1",
   "app_icon": "bi-airplane-fill",
   "step_library_name": "Event Library",
