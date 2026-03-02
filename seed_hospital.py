@@ -642,6 +642,155 @@ NEGATIVE_WALKTHROUGHS = [
         None,
         ["REFER:SPECIALIST"],
     ),
+    # ── Mid-sequence restart — one negative per non-entry/non-exit symbol ──
+    # These prevent RPNI from merging any mid-sequence state with <start>.
+    # If state-after-S were merged with <start>, PATIENT:ENTRY would become
+    # a valid transition from that merged state.  Each example below shows
+    # such a sequence as rejected, blocking the offending state merge.
+    (
+        "Mid-sequence restart after triage assessment (TRIAGE_ASSESSMENT:INITIAL)",
+        "A second patient visit starts immediately after triage assessment — impossible in one episode.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after normal vitals (VITAL_SIGNS:NORMAL)",
+        "Episode restarts after normal vitals — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after abnormal vitals (VITAL_SIGNS:ABNORMAL)",
+        "Episode restarts after abnormal vitals — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:ABNORMAL", "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after vitals reassessment (VITAL_SIGNS:REASSESS)",
+        "Episode restarts after vitals reassessment — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "VITAL_SIGNS:REASSESS",
+            "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after normal BP (BP_CHECK:NORMAL)",
+        "Episode restarts after normal BP check — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL",
+            "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after high BP (BP_CHECK:HIGH)",
+        "Episode restarts after elevated BP — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:ABNORMAL", "BP_CHECK:HIGH",
+            "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after normal ECG (ECG:NORMAL)",
+        "Episode restarts after normal ECG result — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL",
+            "ECG:NORMAL", "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after abnormal ECG (ECG:ABNORMAL)",
+        "Episode restarts after abnormal ECG — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:ABNORMAL", "BP_CHECK:HIGH",
+            "ECG:ABNORMAL", "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after blood draw (BLOOD_DRAW:REQUESTED)",
+        "Episode restarts after blood sample taken — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:ABNORMAL", "BP_CHECK:HIGH",
+            "ECG:ABNORMAL", "BLOOD_DRAW:REQUESTED",
+            "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after X-ray (XRAY:REQUESTED)",
+        "Episode restarts after X-ray ordered — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "VITAL_SIGNS:REASSESS",
+            "VITAL_SIGNS:ABNORMAL", "BP_CHECK:HIGH",
+            "ECG:ABNORMAL", "BLOOD_DRAW:REQUESTED",
+            "XRAY:REQUESTED", "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after ICU admission (ADMIT:ICU)",
+        "Episode restarts after ICU admission decision — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:ABNORMAL", "BP_CHECK:HIGH",
+            "ECG:ABNORMAL", "BLOOD_DRAW:REQUESTED",
+            "ADMIT:ICU", "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after ward admission (ADMIT:WARD)",
+        "Episode restarts after ward admission decision — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL",
+            "ADMIT:WARD", "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after home discharge (DISCHARGE:HOME)",
+        "Episode restarts after home discharge decision — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL",
+            "DISCHARGE:HOME", "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Mid-sequence restart after specialist referral (REFER:SPECIALIST)",
+        "Episode restarts after specialist referral — impossible mid-visit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "VITAL_SIGNS:REASSESS",
+            "VITAL_SIGNS:ABNORMAL", "BP_CHECK:HIGH",
+            "ECG:ABNORMAL", "BLOOD_DRAW:REQUESTED",
+            "XRAY:REQUESTED", "REFER:SPECIALIST",
+            "PATIENT:ENTRY",
+        ],
+    ),
 ]
 
 
