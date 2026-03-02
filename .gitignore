@@ -1,5 +1,9 @@
 # Runtime data — never commit the database or trained model
 data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Python
 __pycache__/
