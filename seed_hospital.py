@@ -400,66 +400,151 @@ NEGATIVE_WALKTHROUGHS = [
             "PATIENT:EXIT",
         ],
     ),
-    # ── Post-exit continuation (prevent PATIENT:EXIT → <start> loop) ──────
+    # ── Post-exit continuation — one negative per alphabet symbol ────────
+    # PATIENT:EXIT must be terminal.  Each entry below takes a valid prefix
+    # ending with PATIENT:EXIT and appends one further step, covering every
+    # distinct symbol in the hospital alphabet so RPNI cannot route any
+    # transition out of the post-exit state back to <start>.
     (
-        "Steps recorded after patient exit (re-entry)",
-        "PATIENT:EXIT has occurred but the episode continues with a new PATIENT:ENTRY — "
-        "exit must be terminal; no steps may follow it in the same walkthrough.",
+        "Post-exit: re-entry (PATIENT:ENTRY)",
+        "New PATIENT:ENTRY recorded after exit — exit is terminal.",
         None,
         [
-            "PATIENT:ENTRY",
-            "TRIAGE_ASSESSMENT:INITIAL",
-            "VITAL_SIGNS:NORMAL",
-            "BP_CHECK:NORMAL",
-            "DISCHARGE:HOME",
-            "PATIENT:EXIT",
-            "PATIENT:ENTRY",
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "PATIENT:ENTRY",
         ],
     ),
     (
-        "Vitals recorded after patient exit",
-        "Vital signs recorded after PATIENT:EXIT — the episode is closed; no clinical "
-        "steps should be possible after the patient has left.",
+        "Post-exit: duplicate exit (PATIENT:EXIT)",
+        "Second PATIENT:EXIT in the same episode — exit is a one-time terminal event.",
         None,
         [
-            "PATIENT:ENTRY",
-            "TRIAGE_ASSESSMENT:INITIAL",
-            "VITAL_SIGNS:ABNORMAL",
-            "BP_CHECK:HIGH",
-            "ECG:ABNORMAL",
-            "BLOOD_DRAW:REQUESTED",
-            "ADMIT:ICU",
-            "PATIENT:EXIT",
-            "VITAL_SIGNS:NORMAL",
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "PATIENT:EXIT",
         ],
     ),
     (
-        "Triage assessment after patient exit",
-        "A triage assessment is logged after PATIENT:EXIT — clinically impossible; "
-        "exit is the terminal event of every valid episode.",
+        "Post-exit: triage assessment (TRIAGE_ASSESSMENT:INITIAL)",
+        "Triage assessment logged after exit — clinically impossible.",
         None,
         [
-            "PATIENT:ENTRY",
-            "TRIAGE_ASSESSMENT:INITIAL",
-            "VITAL_SIGNS:NORMAL",
-            "BP_CHECK:NORMAL",
-            "ADMIT:WARD",
-            "PATIENT:EXIT",
-            "TRIAGE_ASSESSMENT:INITIAL",
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "ADMIT:WARD",
+            "PATIENT:EXIT", "TRIAGE_ASSESSMENT:INITIAL",
         ],
     ),
     (
-        "Duplicate exit after discharge",
-        "Two PATIENT:EXIT events in a single episode — exit is a one-time terminal event.",
+        "Post-exit: normal vitals (VITAL_SIGNS:NORMAL)",
+        "Vital signs recorded after exit — episode is closed.",
         None,
         [
-            "PATIENT:ENTRY",
-            "TRIAGE_ASSESSMENT:INITIAL",
-            "VITAL_SIGNS:NORMAL",
-            "BP_CHECK:NORMAL",
-            "DISCHARGE:HOME",
-            "PATIENT:EXIT",
-            "PATIENT:EXIT",
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:ABNORMAL", "BP_CHECK:HIGH",
+            "BLOOD_DRAW:REQUESTED", "ADMIT:ICU",
+            "PATIENT:EXIT", "VITAL_SIGNS:NORMAL",
+        ],
+    ),
+    (
+        "Post-exit: abnormal vitals (VITAL_SIGNS:ABNORMAL)",
+        "Abnormal vital signs recorded after exit — episode is closed.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "VITAL_SIGNS:ABNORMAL",
+        ],
+    ),
+    (
+        "Post-exit: normal BP (BP_CHECK:NORMAL)",
+        "Blood pressure check after exit — episode is closed.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "BP_CHECK:NORMAL",
+        ],
+    ),
+    (
+        "Post-exit: high BP (BP_CHECK:HIGH)",
+        "Elevated BP recorded after exit — episode is closed.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "BP_CHECK:HIGH",
+        ],
+    ),
+    (
+        "Post-exit: X-ray (XRAY:REQUESTED)",
+        "X-ray ordered after exit — no imaging can be requested once a patient has left.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:ABNORMAL", "BP_CHECK:HIGH",
+            "ECG:ABNORMAL", "BLOOD_DRAW:REQUESTED", "ADMIT:ICU",
+            "PATIENT:EXIT", "XRAY:REQUESTED",
+        ],
+    ),
+    (
+        "Post-exit: ECG (ECG:ABNORMAL)",
+        "ECG performed after exit — no diagnostics after a patient has left.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "ADMIT:WARD",
+            "PATIENT:EXIT", "ECG:ABNORMAL",
+        ],
+    ),
+    (
+        "Post-exit: blood draw (BLOOD_DRAW:REQUESTED)",
+        "Blood sample taken after exit — no lab work after a patient has left.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "BLOOD_DRAW:REQUESTED",
+        ],
+    ),
+    (
+        "Post-exit: home discharge (DISCHARGE:HOME)",
+        "Discharge to home recorded after exit — disposition cannot follow exit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "ADMIT:WARD",
+            "PATIENT:EXIT", "DISCHARGE:HOME",
+        ],
+    ),
+    (
+        "Post-exit: ICU admission (ADMIT:ICU)",
+        "ICU admission recorded after exit — disposition cannot follow exit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "ADMIT:ICU",
+        ],
+    ),
+    (
+        "Post-exit: ward admission (ADMIT:WARD)",
+        "Ward admission recorded after exit — disposition cannot follow exit.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "ADMIT:WARD",
+        ],
+    ),
+    (
+        "Post-exit: specialist referral (REFER:SPECIALIST)",
+        "Specialist referral issued after exit — no clinical actions after a patient has left.",
+        None,
+        [
+            "PATIENT:ENTRY", "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL", "BP_CHECK:NORMAL", "DISCHARGE:HOME",
+            "PATIENT:EXIT", "REFER:SPECIALIST",
         ],
     ),
 ]
