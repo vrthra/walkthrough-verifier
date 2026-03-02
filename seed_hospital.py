@@ -400,6 +400,68 @@ NEGATIVE_WALKTHROUGHS = [
             "PATIENT:EXIT",
         ],
     ),
+    # ── Post-exit continuation (prevent PATIENT:EXIT → <start> loop) ──────
+    (
+        "Steps recorded after patient exit (re-entry)",
+        "PATIENT:EXIT has occurred but the episode continues with a new PATIENT:ENTRY — "
+        "exit must be terminal; no steps may follow it in the same walkthrough.",
+        None,
+        [
+            "PATIENT:ENTRY",
+            "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL",
+            "BP_CHECK:NORMAL",
+            "DISCHARGE:HOME",
+            "PATIENT:EXIT",
+            "PATIENT:ENTRY",
+        ],
+    ),
+    (
+        "Vitals recorded after patient exit",
+        "Vital signs recorded after PATIENT:EXIT — the episode is closed; no clinical "
+        "steps should be possible after the patient has left.",
+        None,
+        [
+            "PATIENT:ENTRY",
+            "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:ABNORMAL",
+            "BP_CHECK:HIGH",
+            "ECG:ABNORMAL",
+            "BLOOD_DRAW:REQUESTED",
+            "ADMIT:ICU",
+            "PATIENT:EXIT",
+            "VITAL_SIGNS:NORMAL",
+        ],
+    ),
+    (
+        "Triage assessment after patient exit",
+        "A triage assessment is logged after PATIENT:EXIT — clinically impossible; "
+        "exit is the terminal event of every valid episode.",
+        None,
+        [
+            "PATIENT:ENTRY",
+            "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL",
+            "BP_CHECK:NORMAL",
+            "ADMIT:WARD",
+            "PATIENT:EXIT",
+            "TRIAGE_ASSESSMENT:INITIAL",
+        ],
+    ),
+    (
+        "Duplicate exit after discharge",
+        "Two PATIENT:EXIT events in a single episode — exit is a one-time terminal event.",
+        None,
+        [
+            "PATIENT:ENTRY",
+            "TRIAGE_ASSESSMENT:INITIAL",
+            "VITAL_SIGNS:NORMAL",
+            "BP_CHECK:NORMAL",
+            "DISCHARGE:HOME",
+            "PATIENT:EXIT",
+            "PATIENT:EXIT",
+        ],
+    ),
 ]
 
 
