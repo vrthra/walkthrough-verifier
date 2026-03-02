@@ -547,6 +547,101 @@ NEGATIVE_WALKTHROUGHS = [
             "PATIENT:EXIT", "REFER:SPECIALIST",
         ],
     ),
+    # ── No-entry-first — one negative per non-PATIENT:ENTRY symbol ────────
+    # <start> must only be exited via PATIENT:ENTRY.  Each entry below is a
+    # sequence whose very first symbol is NOT PATIENT:ENTRY, so RPNI cannot
+    # create a transition from <start> (or any state looping back to it) on
+    # any clinical / routing / exit symbol.
+    (
+        "No-entry-first: immediate exit (PATIENT:EXIT)",
+        "Episode begins with PATIENT:EXIT — patient cannot exit without having entered.",
+        None,
+        ["PATIENT:EXIT"],
+    ),
+    (
+        "No-entry-first: triage assessment (TRIAGE_ASSESSMENT:INITIAL)",
+        "Triage assessment performed before patient registration — impossible sequence.",
+        None,
+        ["TRIAGE_ASSESSMENT:INITIAL"],
+    ),
+    (
+        "No-entry-first: normal vitals (VITAL_SIGNS:NORMAL)",
+        "Vital signs recorded before patient has registered — impossible sequence.",
+        None,
+        ["VITAL_SIGNS:NORMAL"],
+    ),
+    (
+        "No-entry-first: abnormal vitals (VITAL_SIGNS:ABNORMAL)",
+        "Abnormal vital signs recorded before patient registration — impossible sequence.",
+        None,
+        ["VITAL_SIGNS:ABNORMAL"],
+    ),
+    (
+        "No-entry-first: vitals reassessment (VITAL_SIGNS:REASSESS)",
+        "Vital-signs reassessment before patient registration — impossible sequence.",
+        None,
+        ["VITAL_SIGNS:REASSESS"],
+    ),
+    (
+        "No-entry-first: normal BP (BP_CHECK:NORMAL)",
+        "Blood pressure check before patient registration — impossible sequence.",
+        None,
+        ["BP_CHECK:NORMAL"],
+    ),
+    (
+        "No-entry-first: high BP (BP_CHECK:HIGH)",
+        "Elevated BP recorded before patient registration — impossible sequence.",
+        None,
+        ["BP_CHECK:HIGH"],
+    ),
+    (
+        "No-entry-first: normal ECG (ECG:NORMAL)",
+        "ECG performed before patient registration — impossible sequence.",
+        None,
+        ["ECG:NORMAL"],
+    ),
+    (
+        "No-entry-first: abnormal ECG (ECG:ABNORMAL)",
+        "Abnormal ECG before patient registration — impossible sequence.",
+        None,
+        ["ECG:ABNORMAL"],
+    ),
+    (
+        "No-entry-first: blood draw (BLOOD_DRAW:REQUESTED)",
+        "Blood sample taken before patient registration — impossible sequence.",
+        None,
+        ["BLOOD_DRAW:REQUESTED"],
+    ),
+    (
+        "No-entry-first: X-ray (XRAY:REQUESTED)",
+        "X-ray ordered before patient registration — impossible sequence.",
+        None,
+        ["XRAY:REQUESTED"],
+    ),
+    (
+        "No-entry-first: ICU admission (ADMIT:ICU)",
+        "ICU admission before patient registration — impossible sequence.",
+        None,
+        ["ADMIT:ICU"],
+    ),
+    (
+        "No-entry-first: ward admission (ADMIT:WARD)",
+        "Ward admission before patient registration — impossible sequence.",
+        None,
+        ["ADMIT:WARD"],
+    ),
+    (
+        "No-entry-first: home discharge (DISCHARGE:HOME)",
+        "Home discharge before patient registration — impossible sequence.",
+        None,
+        ["DISCHARGE:HOME"],
+    ),
+    (
+        "No-entry-first: specialist referral (REFER:SPECIALIST)",
+        "Specialist referral before patient registration — impossible sequence.",
+        None,
+        ["REFER:SPECIALIST"],
+    ),
 ]
 
 
